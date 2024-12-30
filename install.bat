@@ -1,43 +1,30 @@
 @echo off
-:: ============================================================================
-:: Logitech Assistant å®‰è£…è„šæœ¬
-:: ä½œè€…ï¼šDTer1999
-:: é¡¹ç›®åœ°å€ï¼šhttps://github.com/DTer1999/Logitech_Assistant
-:: é‚®ç®±ï¼šhshm1999@foxmail.com
-:: ============================================================================
+REM ============================================================================
+REM Logitech_Assistant °²×°½Å±¾
+REM ×÷Õß£ºDTer1999
+REM ÏîÄ¿µØÖ·£ºhttps://github.com/DTer1999/Logitech_Assistant
+REM ÓÊÏä£ºhshm1999@foxmail.com
+REM ============================================================================
 
-:: æ£€æŸ¥è™šæ‹Ÿç¯å¢ƒæ˜¯å¦å­˜åœ¨
-if not exist "venv" (
-    echo åˆ›å»ºè™šæ‹Ÿç¯å¢ƒ...
-    python -m venv venv
-) else (
-    echo è™šæ‹Ÿç¯å¢ƒå·²å­˜åœ¨
-)
+:: °²×°°ü¼°ÆäÒÀÀµ
+pip install -e .
 
-:: æ¿€æ´»è™šæ‹Ÿç¯å¢ƒ
-call venv\Scripts\activate
+:: »ñÈ¡°æ±¾ºÅºÍÓ¦ÓÃÃû³Æ
+for /f "tokens=*" %%i in ('python -c "from src import __version__, __app_name__; print(__version__)"') do set VERSION=%%i
+for /f "tokens=*" %%i in ('python -c "from src import __app_name__; print(__app_name__)"') do set APP_NAME=%%i
 
-:: æ£€æŸ¥æ˜¯å¦å·²å®‰è£…ä¾èµ–ï¼ˆä»¥æŸä¸ªå…³é”®åŒ…ä¸ºä¾‹ï¼Œæ¯”å¦‚ PyQt5ï¼‰
-python -c "import PyQt5" 2>nul
-if errorlevel 1 (
-    echo å®‰è£…ä¾èµ–...
-    pip install -r requirements.txt
-) else (
-    echo ä¾èµ–å·²å®‰è£…
-)
-
-:: è¯¢é—®æ˜¯å¦éœ€è¦é‡æ–°æ‰“åŒ…
-set /p choice=æ˜¯å¦éœ€è¦é‡æ–°æ‰“åŒ…ç¨‹åºï¼Ÿ(Y/N): 
+:: Ñ¯ÎÊÊÇ·ñĞèÒªÖØĞÂ´ò°ü
+set /p choice=ÊÇ·ñĞèÒªÖØĞÂ´ò°ü³ÌĞò£¿(Y/N): 
 if /i "%choice%"=="Y" (
-    :: åˆ é™¤æ—§çš„æ„å»ºæ–‡ä»¶
-    echo æ¸…ç†æ—§çš„æ„å»ºæ–‡ä»¶...
+    :: É¾³ı¾ÉµÄ¹¹½¨ÎÄ¼ş
+    echo ÇåÀí¾ÉµÄ¹¹½¨ÎÄ¼ş...
     rmdir /s /q build 2>nul
     rmdir /s /q dist 2>nul
 
-    :: ä½¿ç”¨ PyInstaller æ‰“åŒ…
-    echo å¼€å§‹æ‰“åŒ…...
+    :: Ê¹ÓÃ PyInstaller ´ò°ü
+    echo ¿ªÊ¼´ò°ü...
     pyinstaller ^
-        --name "Logitech_Assistant" ^
+        --name "%APP_NAME%_v%VERSION%" ^
         --windowed ^
         --icon=resources/assets/2.ico ^
         --add-data "resources;resources" ^
@@ -46,15 +33,15 @@ if /i "%choice%"=="Y" (
         --noconfirm ^
         src\main.py
 
-    :: å¤åˆ¶å¿…è¦çš„æ–‡ä»¶åˆ° dist ç›®å½•
-    echo å¤åˆ¶èµ„æºæ–‡ä»¶...
-    xcopy /y /s resources "dist\Logitech_Assistant\resources\"
-    xcopy /y /s temp "dist\Logitech_Assistant\temp\"
-    xcopy /y /s tests "dist\Logitech_Assistant\tests\"
+    :: ¸´ÖÆ±ØÒªµÄÎÄ¼şµ½ dist Ä¿Â¼
+    echo ¸´ÖÆ×ÊÔ´ÎÄ¼ş...
+    xcopy /y /s resources "dist\%APP_NAME%_v%VERSION%\resources\"
+    xcopy /y /s temp "dist\%APP_NAME%_v%VERSION%\temp\"
+    xcopy /y /s tests "dist\%APP_NAME%_v%VERSION%\tests\"
 
-    echo æ‰“åŒ…å®Œæˆï¼
+    echo ´ò°üÍê³É£¡
 ) else (
-    echo è·³è¿‡æ‰“åŒ…æ­¥éª¤
+    echo Ìø¹ı´ò°ü²½Öè
 )
 
 pause

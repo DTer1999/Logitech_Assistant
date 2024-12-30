@@ -6,7 +6,7 @@ import traceback
 from typing import Optional
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt
-from src.ui.main_window import MainWindow
+from src.ui.main_window import MainWindow  # 使用绝对导入
 from src.config.settings import Settings
 from src.utils.logger import Logger
 
@@ -38,8 +38,7 @@ class Application:
 
             # 应用窗口设置
             window_settings = self.settings.get_window_settings()
-            # 设置窗口标题  
-            self.window.setWindowTitle(window_settings['title'])
+            
             # 设置窗口大小
             self.window.resize(
                 window_settings['width'],

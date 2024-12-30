@@ -37,22 +37,15 @@ git clone https://github.com/DTer1999/Logitech_Assistant.git
 cd Logitech_Assistant
 ```
 
-2. 创建虚拟环境（推荐）：
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
-```
+2. 运行安装脚本：
+- 双击运行 `install.bat`
+- 该脚本会自动安装所有必要的依赖并打包程序
 
-3. 安装依赖：
-```bash
-# 开发环境安装（包含所有开发工具）
-pip install -r requirements.txt
+或者如果您想手动安装：
 
-# 或仅安装运行依赖
-pip install .
+```bash
+# 安装包及其依赖
+pip install -e .
 ```
 
 ## 使用说明

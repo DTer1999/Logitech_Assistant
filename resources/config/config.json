@@ -3,8 +3,7 @@
         "width": 600,
         "height": 600,
         "opacity": 1,
-        "always_on_top": true,
-        "title": "Logitech_Assistant"
+        "always_on_top": true
     },
     "recognition": {
         "threshold": 0.5,

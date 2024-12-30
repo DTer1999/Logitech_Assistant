@@ -4,11 +4,13 @@ from PyQt5.QtGui import QIcon, QPixmap
 import os
 
 from .tabs.auto_tab import AutoTab
-from .tabs.weapon_tab import WeaponTab
-from .tabs.settings_tab import SettingsTab
+# from .tabs.weapon_tab import WeaponTab
+# from .tabs.settings_tab import SettingsTab
 from .label import FloatingLabel
 from ..config.settings import Settings
 from ..utils.logger import Logger
+from .. import __version__, __app_name__
+from .tabs.about_tab import AboutTab
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -38,6 +40,9 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(icon)
             self.logger.info(f"成功加载图标: {icon_path}")
 
+        self.setWindowTitle(f"{__app_name__} v{__version__}")
+        self.resize(800, 600)
+
     def _init_tabs(self):
         """初始化标签页"""
         self.tab_widget = QTabWidget()
@@ -50,6 +55,10 @@ class MainWindow(QMainWindow):
         # 添加标签页
         self.tab_widget.addTab(self.auto_tab, "自动识别")
         # self.tab_widget.addTab(self.weapon_tab, "武器参数")
+
+        # 添加关于标签页
+        self.about_tab = AboutTab()
+        self.tab_widget.addTab(self.about_tab, "关于")
 
     def _setup_window_properties(self):
         """设置窗口属性"""
