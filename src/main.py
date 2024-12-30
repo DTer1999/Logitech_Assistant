@@ -4,11 +4,13 @@
 import sys
 import traceback
 from typing import Optional
+
 from PyQt5.QtWidgets import QApplication, QMessageBox
-from PyQt5.QtCore import Qt
-from src.ui.main_window import MainWindow  # 使用绝对导入
+
 from src.config.settings import Settings
+from src.ui.main_window import MainWindow  # 使用绝对导入
 from src.utils.logger import Logger
+
 
 class Application:
     """应用程序主类"""
@@ -47,9 +49,9 @@ class Application:
             # 设置窗口透明度
             self.window.setWindowOpacity(window_settings['opacity'])
 
-            # 设置窗口置顶
-            if window_settings['always_on_top']:
-                self.window.setWindowFlags(Qt.WindowStaysOnTopHint)
+            # 删除置顶设置相关代码
+            # if window_settings['always_on_top']:
+            #     self.window.setWindowFlags(Qt.WindowStaysOnTopHint)
             
             return True
             

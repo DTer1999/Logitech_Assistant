@@ -1,13 +1,13 @@
-import time
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                           QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog)
+from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+                             QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog)
+
 from ...config.settings import Settings
-from ...utils.logger import Logger
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
-from PyQt5.QtCore import QCoreApplication
+from ...utils.logger import Logger
 
 
 class AutoTab(QWidget):
@@ -46,8 +46,14 @@ class AutoTab(QWidget):
         top_right = QHBoxLayout()
         self.show_cb = QCheckBox("开启Label")
         self.show_cb.clicked.connect(self.show_hide_label)
+
+        # 添加置顶复选框
+        self.always_on_top_cb = QCheckBox("置顶")
+        self.always_on_top_cb.clicked.connect(self.toggle_always_on_top)
+        
         top_right.addStretch()
         top_right.addWidget(self.show_cb)
+        top_right.addWidget(self.always_on_top_cb)
 
         top_right_widget = QWidget()
         top_right_widget.setLayout(top_right)
@@ -281,3 +287,18 @@ class AutoTab(QWidget):
         if self.text_browser:
             self.text_browser.append(message)
             self.text_browser.moveCursor(QTextCursor.End)
+
+    def toggle_always_on_top(self, checked: bool):
+        """控制主窗口置顶"""
+        window = self.window()  # 获取主窗口
+        # 保存当前窗口位置
+        pos = window.pos()
+
+        if checked:
+            window.setWindowFlags(window.windowFlags() | Qt.WindowStaysOnTopHint)
+        else:
+            window.setWindowFlags(window.windowFlags() & ~Qt.WindowStaysOnTopHint)
+
+        # 恢复窗口位置并显示
+        window.move(pos)
+        window.show()

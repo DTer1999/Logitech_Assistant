@@ -1,7 +1,8 @@
-from typing import Dict, Any, Optional
 import json
-import os
+import sys
 from pathlib import Path
+from typing import Dict, Any, Optional
+
 
 class Settings:
     """配置管理类"""
@@ -39,11 +40,29 @@ class Settings:
         self.config = self._load_config()
         self._ensure_directories()
 
-    @staticmethod
-    def _get_config_path() -> Path:
+    def _get_base_path(self) -> Path:
+        """获取基础路径
+        在开发环境下返回项目根目录
+        在打包环境下返回可执行文件所在目录
+        """
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的环境
+            return Path(sys._MEIPASS)
+        else:
+            # 开发环境
+            return Path(__file__).parent.parent.parent
+
+    def _ensure_directories(self):
+        """确保必要的目录存在"""
+        base_path = self._get_base_path()
+        for path_name, relative_path in self.config['paths'].items():
+            # 构建路径
+            path = base_path / relative_path
+            path.mkdir(parents=True, exist_ok=True)
+
+    def _get_config_path(self) -> Path:
         """获取配置文件路径"""
-        root_dir = Path(__file__).parent.parent.parent
-        return root_dir / "resources/config/config.json"
+        return self._get_base_path() / "resources/config/config.json"
 
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
@@ -69,11 +88,6 @@ class Settings:
                 result[key] = value
                 
         return result
-
-    def _ensure_directories(self):
-        """确保必要的目录存在"""
-        for path_name, path in self.config['paths'].items():
-            Path(path).mkdir(parents=True, exist_ok=True)
 
     def save(self) -> bool:
         """保存配置到文件"""
@@ -122,26 +136,14 @@ class Settings:
             return False
 
     def get_path(self, path_name: str) -> Optional[Path]:
-        """获取特定路径的绝对路径
-        
-        Args:
-            path_name: 路径名称
-            
-        Returns:
-            Optional[Path]: 绝对路径对象
-        """
+        """获取特定路径的绝对路径"""
         try:
             relative_path = self.get('paths', path_name)
             if not relative_path:
                 return None
-            
-            # 获取项目根目录（config.json所在目录的父目录）
-            root_dir = Path(__file__).parent.parent.parent
-            
-            # 构建绝对路径
-            absolute_path = root_dir / relative_path
-            
-            # 确保目录存在
+
+            base_path = self._get_base_path()
+            absolute_path = base_path / relative_path
             absolute_path.mkdir(parents=True, exist_ok=True)
             
             return absolute_path
