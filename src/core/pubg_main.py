@@ -1,14 +1,11 @@
 import keyboard
 import time
 import json
-import os
-from copy import deepcopy
 from typing import Dict, Tuple
 from dataclasses import dataclass
 from threading import Thread
 from pynput import mouse
 from concurrent.futures import ThreadPoolExecutor
-from PyQt5.QtCore import pyqtSignal, QObject
 from ..utils.logger import Logger
 from ..utils.constants import translate_name, get_attribute_keys
 from ..core.image_recognition import ImageRecognition
@@ -205,10 +202,10 @@ class PubgCore():
 
     def write_files(self, results: Dict) -> None:
         """将识别结果写入文件"""
-        current_address = os.getcwd().replace("\\", "/")
-        
+        temp = self.settings.get_path('temp')
+        self.logger.info(f"temp地址为：{temp}")
         # 写入 weapon.lua
-        with open(f"{current_address}/{self.settings.get_path('temp')}/weapon.lua", "w", encoding="utf-8") as f:
+        with open(f"{temp}/weapon.lua", "w", encoding="utf-8") as f:
             f.write(f'weapon_name = "{results.get("weapons_name_" + self.state.current_weapon, "")}"\n')
             f.write(f'muzzles = "{results.get("muzzles_" + self.state.current_weapon, "")}"\n')
             f.write(f'grips = "{results.get("grips_" + self.state.current_weapon, "")}"\n')
@@ -233,7 +230,7 @@ class PubgCore():
             "shoot": translate_name(self.state.results.get("shoot", "none"))
         }
 
-        with open(f"{current_address}/{self.settings.get_path('temp')}/results.json", 'w', encoding='utf-8') as f:
+        with open(f"{temp}/results.json", 'w', encoding='utf-8') as f:
             json.dump(results_json, f, ensure_ascii=False)
 
     def init_pubg(self) -> None:
@@ -263,10 +260,11 @@ class PubgCore():
 
             if self.state.right_button_pressed:
                 self.logger.info("右键开镜，正在压枪中")
-                self.write_files({})
-            else:
                 self.write_files(self.state.results)
-            
+                time.sleep(1)
+            else:
+                self.write_files({})
+
             time.sleep(0.01)
 
         # 循环结束后清理资源

@@ -9,13 +9,13 @@ REM ============================================================================
 :: 安装包及其依赖
 pip install -e .
 
-:: 获取版本号和应用名称
-for /f "tokens=*" %%i in ('python -c "from src import __version__, __app_name__; print(__version__)"') do set VERSION=%%i
-for /f "tokens=*" %%i in ('python -c "from src import __app_name__; print(__app_name__)"') do set APP_NAME=%%i
-
 :: 询问是否需要重新打包
 set /p choice=是否需要重新打包程序？(Y/N): 
 if /i "%choice%"=="Y" (
+    :: 获取版本号和应用名称
+    for /f "tokens=*" %%i in ('python -c "from src import __version__; print(__version__)"') do set VERSION=%%i
+    for /f "tokens=*" %%i in ('python -c "from src import __app_name__; print(__app_name__)"') do set APP_NAME=%%i
+
     :: 删除旧的构建文件
     echo 清理旧的构建文件...
     rmdir /s /q build 2>nul
@@ -24,7 +24,7 @@ if /i "%choice%"=="Y" (
     :: 使用 PyInstaller 打包
     echo 开始打包...
     pyinstaller ^
-        --name "%APP_NAME%_v%VERSION%" ^
+        --name "Logitech_Assistant" ^
         --windowed ^
         --icon=resources/assets/2.ico ^
         --add-data "resources;resources" ^
@@ -35,9 +35,9 @@ if /i "%choice%"=="Y" (
 
     :: 复制必要的文件到 dist 目录
     echo 复制资源文件...
-    xcopy /y /s resources "dist\%APP_NAME%_v%VERSION%\resources\"
-    xcopy /y /s temp "dist\%APP_NAME%_v%VERSION%\temp\"
-    xcopy /y /s tests "dist\%APP_NAME%_v%VERSION%\tests\"
+    xcopy /y /s resources "dist\Logitech_Assistant\resources\"
+    xcopy /y /s temp "dist\Logitech_Assistant\temp\"
+    xcopy /y /s tests "dist\Logitech_Assistant\tests\"
 
     echo 打包完成！
 ) else (
