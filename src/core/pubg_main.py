@@ -203,7 +203,6 @@ class PubgCore():
     def write_files(self, results: Dict) -> None:
         """将识别结果写入文件"""
         temp = self.settings.get_path('temp')
-        self.logger.info(f"temp地址为：{temp}")
         # 写入 weapon.lua
         with open(f"{temp}/weapon.lua", "w", encoding="utf-8") as f:
             f.write(f'weapon_name = "{results.get("weapons_name_" + self.state.current_weapon, "")}"\n')
