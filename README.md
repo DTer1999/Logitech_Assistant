@@ -29,25 +29,6 @@
 - Windows 10/11
 - 1920x1080 或 2560x1440 分辨率
 
-## 安装说明
-
-1. 克隆仓库：
-```bash
-git clone https://github.com/DTer1999/Logitech_Assistant.git
-cd Logitech_Assistant
-```
-
-2. 运行安装脚本：
-- 双击运行 `install.bat`
-- 该脚本会自动安装所有必要的依赖并打包程序
-
-或者如果您想手动安装：
-
-```bash
-# 安装包及其依赖
-pip install -e .
-```
-
 ## 使用说明
 
 1. 以管理员身份运行Logitech G HUB
