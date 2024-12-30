@@ -1,0 +1,18 @@
+# 运行依赖
+opencv-python>=4.5.0
+numpy>=1.19.0
+PyQt5>=5.15.0
+mss>=6.1.0
+keyboard>=0.13.5
+pywin32>=300
+pynput~=1.7.7
+setuptools~=75.6.0
+
+# 开发依赖
+pytest>=6.0.0
+flake8>=3.9.0
+black>=21.5b2
+mypy>=0.900
+
+# 从 setup.py 安装当前项目
+-e .
