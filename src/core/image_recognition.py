@@ -2,9 +2,9 @@ import os
 from typing import Dict, Optional, Tuple, List
 
 import cv2
-import mss
 import numpy as np
 
+from .capture.capture_manager import CaptureManager
 from ..config.settings import Settings
 from ..utils.logger_factory import LoggerFactory
 
@@ -16,37 +16,8 @@ class ImageRecognition:
         """初始化截图工具"""
         self.settings = Settings.get_instance()
         self.logger = LoggerFactory.get_logger()
-        self.sct = mss.mss()
+        self.capture_manager = CaptureManager()
     
-    def __del__(self):
-        """清理资源"""
-        try:
-            self.sct.close()
-        except Exception as e:
-            self.logger.error(f"清理截图资源失败: {e}")
-
-    def capture_screen(self, region: List[int]) -> np.ndarray:
-        """
-        捕获屏幕指定区域
-        Args:
-            region: [x, y, width, height] 格式的区域坐标
-        Returns:
-            numpy.ndarray: BGR格式的图像数组，失败返回空数组
-        """
-        try:
-            with mss.mss() as sct:
-                monitor = {
-                    "left": region[0],
-                    "top": region[1],
-                    "width": region[2],
-                    "height": region[3]
-                }
-                screenshot = np.array(sct.grab(monitor))
-                return cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
-                
-        except Exception as e:
-            self.logger.error(f"截图失败: {e}")
-            return np.array([])
 
     @staticmethod
     def img_read(image_path: str) -> Optional[np.ndarray]:
@@ -131,9 +102,9 @@ class ImageRecognition:
 
     def process_region(
         self,
-        frame: np.ndarray,
+            category: str,
         templates: Dict[str, np.ndarray],
-        category: str
+            region: list
     ) -> Tuple[str, str]:
         """
         处理特定区域的图像识别
@@ -145,6 +116,9 @@ class ImageRecognition:
             Tuple[str, str]: (类别, 识别结果)
         """
         try:
+            method = self.settings.get('capture', 'method', 'win32')
+            capture = self.capture_manager.get_capture(method)
+            frame = capture.capture(region)
             if frame is None or frame.size == 0:
                 return category, 'none'
             
@@ -154,6 +128,8 @@ class ImageRecognition:
         except Exception as e:
             self.logger.error(f"处理区域失败: {e}")
             return category, 'none'
+        finally:
+            self.capture_manager.cleanup()
 
     def batch_process_regions(
         self,
@@ -178,13 +154,11 @@ class ImageRecognition:
                 if category in exclude_categories:
                     continue
 
-                frame = self.capture_screen(region)
-                if frame is not None and frame.size > 0:
-                    category_templates = templates.get(category.split('_')[0], {})
-                    _, result = self.process_region(frame, category_templates, category)
-                    results[category] = result
-                else:
-                    results[category] = 'none'
+                # 获取模板
+                category_templates = templates.get(category.split('_')[0], {})
+                _, result = self.process_region(category, category_templates, region)
+                results[category] = result
+
 
         except Exception as e:
             self.logger.error(f"批量处理失败: {e}")

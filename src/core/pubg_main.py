@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Thread
-from typing import Dict, Tuple
+from typing import Dict
 
 import keyboard
 from pynput import mouse
@@ -97,17 +97,6 @@ class PubgCore():
         self.logger.info("识别配置文件加载完成")
         return config_data
 
-
-    def process_region(self, category: str, region: list) -> Tuple[str, str]:
-        """处理特定区域的图像识别"""
-        frame = self.image_recognition.capture_screen(region)
-        templates_category = category.split('_')[0]
-        result = self.image_recognition.identify_from_templates(
-            frame,
-            self.templates[templates_category]
-        )
-        return category, result
-
     def on_scroll(self, x: int, y: int, dx: int, dy: int) -> None:
         """处理鼠标滚轮事件"""
         if self.state.right_button_pressed:
@@ -129,8 +118,9 @@ class PubgCore():
             return
         
         try:
-            shoot_category, shoot_result = self.process_region(
-                "shoot", 
+            shoot_category, shoot_result = self.image_recognition.process_region(
+                "shoot",
+                self.templates["shoot"],
                 [
                     self.shoot_pixel['x'], 
                     self.shoot_pixel['y'], 
@@ -147,7 +137,11 @@ class PubgCore():
     def identify_pose(self, region: list) -> None:
         """持识别姿势"""
         while self.state.off_on_flag:
-            pose_category, pose_result = self.process_region("poses", region)
+            pose_category, pose_result = self.image_recognition.process_region(
+                "poses",
+                self.templates["poses"],
+                region
+            )
             self.state.results[pose_category] = pose_result
             time.sleep(10)
 
@@ -280,7 +274,8 @@ class PubgCore():
         extends = ['poses', 'bag', 'shoot']
         with ThreadPoolExecutor() as executor:
             futures = [
-                executor.submit(self.process_region, category, region)
+                executor.submit(self.image_recognition.process_region,
+                                category, self.templates[category.split('_')[0]], region)
                 for category, region in self.regions.items()
                 if all(_ not in category for _ in extends)
             ]
@@ -298,7 +293,9 @@ class PubgCore():
     def toggle_recognition(self, event) -> None:
         """切换识别状态"""
         time.sleep(0.1)
-        bag_category, bag_result = self.process_region("bag", self.regions['bag'])
+        bag_category, bag_result = self.image_recognition.process_region("bag", self.templates["bag"],
+                                                                         self.regions['bag'])
+
         self.state.results[bag_category] = bag_result
         self.state.is_recognizing = (bag_result == 'bag')
 

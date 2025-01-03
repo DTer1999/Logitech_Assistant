@@ -2,9 +2,11 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                             QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog)
+                             QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog,
+                             QComboBox)
 
 from ...config.settings import Settings
+from ...core.capture.capture_manager import CaptureManager
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
 from ...utils.logger_factory import LoggerFactory
@@ -18,6 +20,7 @@ class AutoTab(QWidget):
         self.label = label
 
         self.worker_thread = WorkerThread()
+
         self.is_processing = False
         self.is_switching = False
 
@@ -42,23 +45,28 @@ class AutoTab(QWidget):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 5, 10, 10)
 
-        # 右上角的Label控制
+        # 右上角的控制区域
         top_right = QHBoxLayout()
+        top_right.addStretch()  # 左侧弹性空间，将控件推到右侧
+        
         self.show_cb = QCheckBox("开启Label")
         self.show_cb.clicked.connect(self.show_hide_label)
 
-        # 添加置顶复选框
         self.always_on_top_cb = QCheckBox("置顶")
         self.always_on_top_cb.clicked.connect(self.toggle_always_on_top)
-        
-        top_right.addStretch()
-        top_right.addWidget(self.show_cb)
-        top_right.addWidget(self.always_on_top_cb)
 
+        # 从右到左添加控件
+        top_right.addWidget(self.always_on_top_cb)  # 置顶复选框
+        top_right.addWidget(self.show_cb)  # 显示Label复选框
+        top_right.addSpacing(10)  # 右侧边距
+
+        # 创建容器并设置布局
         top_right_widget = QWidget()
         top_right_widget.setLayout(top_right)
-        top_right_widget.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(top_right_widget, 0, 0, 1, 3)
+        top_right_widget.setContentsMargins(0, 0, 0, 0)  # 移除容器边距
+
+        # 将容器添加到主布局的右上角
+        main_layout.addWidget(top_right_widget, 0, 0, 1, 3, Qt.AlignRight)
 
         # 创建1号和2号区域
         group1, self.weapon1_labels = self.create_weapon_group("1号")
@@ -73,12 +81,14 @@ class AutoTab(QWidget):
         main_layout.addWidget(log_group, 1, 2)
 
         group2, self.weapon2_labels = self.create_weapon_group("2号")
-        main_layout.addWidget(group2, 2, 0, 1, 2)
+        main_layout.addWidget(group2, 2, 0, 2, 2)
+
+        main_layout.addWidget(self.init_capture_methods(), 2, 2, 1, 1, Qt.AlignTop)
 
         # 右下角控制按钮组
         control_group = QGroupBox()
         control_layout = QHBoxLayout()
-        control_layout.setContentsMargins(10, 5, 10, 5)
+        # control_layout.setContentsMargins(10, 5, 10, 5)
 
         self.switch_button = QPushButton('开启')
         self.switch_button.setCheckable(True)
@@ -92,7 +102,7 @@ class AutoTab(QWidget):
         control_layout.addWidget(self.exit_button)
 
         control_group.setLayout(control_layout)
-        main_layout.addWidget(control_group, 2, 2, Qt.AlignBottom)
+        main_layout.addWidget(control_group, 3, 2, Qt.AlignBottom)
 
         # 当前武器区域
         weapon_widget = QWidget()
@@ -108,7 +118,7 @@ class AutoTab(QWidget):
         self.current_weapon_label.setAlignment(Qt.AlignCenter)
         weapon_layout.addWidget(self.current_weapon_label)
         weapon_widget.setLayout(weapon_layout)
-        main_layout.addWidget(weapon_widget, 3, 0, 1, 2)
+        main_layout.addWidget(weapon_widget, 4, 0, 1, 2)
 
         # 设置列的拉伸因子
         main_layout.setColumnStretch(0, 1)
@@ -284,7 +294,7 @@ class AutoTab(QWidget):
     def log_message(self, message: str):
         """处理日志消息"""
         # 普通日志显示
-        if self.text_browser:
+        if hasattr(self, 'text_browser'):
             self.text_browser.append(message)
             self.text_browser.moveCursor(QTextCursor.End)
 
@@ -302,3 +312,38 @@ class AutoTab(QWidget):
         # 恢复窗口位置并显示
         window.move(pos)
         window.show()
+
+    def init_capture_methods(self):
+        capture_group = QGroupBox("操作")
+        capture_layout = QHBoxLayout()
+        # capture_layout.setContentsMargins(10, 5, 10, 5)  # 设置统一的内边距
+        capture_label = QLabel("截图方式:")
+        self.capture_combo = QComboBox()
+        """初始化截图方式下拉框"""
+        # 获取所有可用的截图方式
+        capture_methods = CaptureManager().get_capture_methods()
+
+        # 添加到下拉框
+        for display_name, method_id in capture_methods.items():
+            self.capture_combo.addItem(display_name, display_name)
+
+        # 设置当前选中的方式
+        current_method = self.settings.get('capture', 'method', 'win32')
+        index = self.capture_combo.findText(current_method)
+        if index >= 0:
+            self.capture_combo.setCurrentIndex(index)
+        self.capture_combo.currentIndexChanged.connect(self.on_capture_method_changed)
+        capture_layout.addWidget(capture_label)
+        capture_layout.addWidget(self.capture_combo)
+        capture_group.setLayout(capture_layout)
+        return capture_group
+
+    def on_capture_method_changed(self, index: int):
+        """截图方式改变时的处理"""
+        try:
+            method = self.capture_combo.currentData()
+            self.settings.set('capture', 'method', method)
+            self.logger.info(f"截图方式已更改为: {method}")
+
+        except Exception as e:
+            self.logger.error(f"更改截图方式时出错: {e}")

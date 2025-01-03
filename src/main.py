@@ -42,11 +42,6 @@ class Application:
             )
             # 设置窗口透明度
             self.window.setWindowOpacity(window_settings['opacity'])
-
-            # 删除置顶设置相关代码
-            # if window_settings['always_on_top']:
-            #     self.window.setWindowFlags(Qt.WindowStaysOnTopHint)
-            
             return True
             
         except Exception as e:
