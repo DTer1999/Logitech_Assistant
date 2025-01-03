@@ -1,5 +1,4 @@
 import threading
-from typing import List
 
 import cv2
 import mss
@@ -21,24 +20,23 @@ class MSSCapture(BaseCapture):
         try:
             if not hasattr(self._local, 'mss') or self._local.mss is None:
                 self._local.mss = mss.mss()
+                # 获取主显示器
+                self._local.monitor = self._local.mss.monitors[1]  # monitors[0]是所有显示器的组合
             return True
         except Exception as e:
             self.logger.error(f"初始化MSS截图失败: {e}")
             return False
 
-    def capture(self, region: List[int]) -> np.ndarray:
+    def capture(self) -> np.ndarray:
         try:
             # 确保 MSS 实例存在
             if not hasattr(self._local, 'mss') or self._local.mss is None:
                 self.initialize()
 
-            monitor = {
-                "left": region[0],
-                "top": region[1],
-                "width": region[2],
-                "height": region[3]
-            }
-            screenshot = np.array(self._local.mss.grab(monitor))
+            # 截取全屏
+            screenshot = np.array(self._local.mss.grab(self._local.monitor))
+
+            # 转换颜色空间
             return cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
 
         except Exception as e:
@@ -51,7 +49,7 @@ class MSSCapture(BaseCapture):
     def cleanup(self):
         """清理MSS资源"""
         try:
-            if hasattr(self._local, 'mss') and self._local.mss is not None:
+            if hasattr(self._local, 'mss') and self._local.mss is None:
                 self._local.mss.close()
                 self._local.mss = None
         except Exception as e:

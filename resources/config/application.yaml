@@ -1,6 +1,6 @@
 capture:
   interval: 0.1
-  method: nvidia
+  method: win32
 label:
   background: rgba(0, 0, 0, 150)
   background_color: rgba(0, 0, 0, 150)

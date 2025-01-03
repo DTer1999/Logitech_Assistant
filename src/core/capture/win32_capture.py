@@ -1,5 +1,3 @@
-from typing import List
-
 import cv2
 import numpy as np
 import win32con
@@ -7,6 +5,7 @@ import win32gui
 import win32ui
 
 from .base_capture import BaseCapture
+from ...config.settings import Settings
 
 
 class Win32Capture(BaseCapture):
@@ -19,6 +18,9 @@ class Win32Capture(BaseCapture):
         self.hwndDC = None
         self.mfcDC = None
         self.saveDC = None
+        self.settings = Settings.get_instance()
+        self.screen_width = self.settings.get('capture', 'screen_width', 2560)
+        self.screen_height = self.settings.get('capture', 'screen_height', 1440)
 
     def initialize(self) -> bool:
         """初始化截图资源"""
@@ -31,19 +33,22 @@ class Win32Capture(BaseCapture):
             return True
         except Exception as e:
             self.logger.error(f"初始化Win32截图失败: {e}")
+            self.cleanup()  # 确保清理资源
             return False
 
-    def capture(self, region: List[int]) -> np.ndarray:
+    def capture(self) -> np.ndarray:
+        if not self.mfcDC or not self.saveDC:
+            self.initialize()
         try:
             # 创建位图对象
             saveBitMap = win32ui.CreateBitmap()
-            saveBitMap.CreateCompatibleBitmap(self.mfcDC, region[2], region[3])
+            saveBitMap.CreateCompatibleBitmap(self.mfcDC, self.screen_width, self.screen_height)
             self.saveDC.SelectObject(saveBitMap)
 
-            # 复制屏幕内容到位图
+            # 复制全屏内容到位图
             self.saveDC.BitBlt(
-                (0, 0), (region[2], region[3]),
-                self.mfcDC, (region[0], region[1]),
+                (0, 0), (self.screen_width, self.screen_height),
+                self.mfcDC, (0, 0),
                 win32con.SRCCOPY
             )
 
@@ -51,17 +56,17 @@ class Win32Capture(BaseCapture):
             bmpinfo = saveBitMap.GetInfo()
             bmpstr = saveBitMap.GetBitmapBits(True)
             img = np.frombuffer(bmpstr, dtype='uint8')
-            img.shape = (region[3], region[2], 4)
+            img.shape = (self.screen_height, self.screen_width, 4)
 
-            # 清理资源
+            # 清理位图资源
             win32gui.DeleteObject(saveBitMap.GetHandle())
-            self.cleanup()
 
             # 转换为BGR格式
             return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
         except Exception as e:
             self.logger.error(f"Win32截图失败: {e}")
+        finally:
             self.cleanup()
 
     def cleanup(self):

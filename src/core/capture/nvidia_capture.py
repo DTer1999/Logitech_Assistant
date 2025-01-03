@@ -1,7 +1,6 @@
 import glob
 import os
 import time
-from typing import List
 
 import cv2
 import keyboard
@@ -14,6 +13,7 @@ class NvidiaCapture(BaseCapture):
     def __init__(self):
         super().__init__()
         self.method = 'nvidia'
+        self.new_file = None
 
     def initialize(self) -> bool:
         try:
@@ -32,7 +32,7 @@ class NvidiaCapture(BaseCapture):
             self.logger.error(f"NVIDIA截图初始化失败: {e}")
             return False
 
-    def capture(self, region: List[int]) -> np.ndarray:
+    def capture(self) -> np.ndarray:
         try:
             # 记录截图前的文件列表
             before_files = set(glob.glob(os.path.join(self.screenshots_path, "*.png")))
@@ -46,33 +46,27 @@ class NvidiaCapture(BaseCapture):
             # 等待截图文件生成
             max_wait = 5  # 最多等待2秒
             start_time = time.time()
-            new_file = None
+
 
             while time.time() - start_time < max_wait:
                 current_files = set(glob.glob(os.path.join(self.screenshots_path, "*.png")))
                 new_files = current_files - before_files
 
                 if new_files:
-                    new_file = max(new_files, key=os.path.getctime)
+                    self.new_file = max(new_files, key=os.path.getctime)
                     break
 
                 time.sleep(0.1)
 
-            if not new_file:
+            if not self.new_file:
                 self.logger.error("未找到新生成的截图文件")
 
             # 读取并裁剪图片
-            image = cv2.imread(new_file)
-            x, y, w, h = region
-            cropped = image[y:y + h, x:x + w]
-
-            # 删除原始截图文件
-            os.remove(new_file)
-
-            return cropped
+            return cv2.imread(self.new_file)
 
         except Exception as e:
             self.logger.error(f"NVIDIA截图失败: {e}")
 
     def cleanup(self):
-        pass
+        # 删除原始截图文件
+        os.remove(self.new_file)

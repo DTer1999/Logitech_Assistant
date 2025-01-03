@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 import numpy as np
 
@@ -17,7 +16,7 @@ class BaseCapture(ABC):
         pass
 
     @abstractmethod
-    def capture(self, region: List[int]) -> np.ndarray:
+    def capture(self) -> np.ndarray:
         """执行截图"""
         pass
 

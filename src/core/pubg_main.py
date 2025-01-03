@@ -1,6 +1,5 @@
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Thread
 from typing import Dict
@@ -272,21 +271,9 @@ class PubgCore():
     def process_recognition(self) -> None:
         """处理识别逻辑"""
         extends = ['poses', 'bag', 'shoot']
-        with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(self.image_recognition.process_region,
-                                category, self.templates[category.split('_')[0]], region)
-                for category, region in self.regions.items()
-                if all(_ not in category for _ in extends)
-            ]
-            for future in futures:
-                cat, res = future.result()
-                self.state.results[cat] = res
-                
-                # 更新当前倍镜
-                if cat.startswith('scopes_'):
-                    self.state.current_scope = res
-        
+        self.state.results = self.image_recognition.batch_process_regions(self.regions, self.templates, extends)
+        self.state.current_scope = self.state.results.get('scopes_' + self.state.current_weapon,
+                                                          self.state.current_scope)
         self.state.is_recognizing = False
         self.display_results()
 
