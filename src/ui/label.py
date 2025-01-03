@@ -1,16 +1,20 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QPalette, QColor
 from typing import Optional
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
+
 from src.config.settings import Settings
+
 
 class FloatingLabel(QWidget):
     """浮动标签类，用于显示游戏状态信息"""
 
-    def __init__(self, settings: Settings, parent: Optional[QWidget] = None):
+    def __init__(self, parent: Optional[QWidget] = None):
         """初始化浮动标签"""
         super().__init__(parent)
-        self.label_settings = settings.get_label_settings()
+        self.settings = Settings.get_instance()
+        self.label_settings = self.settings.get('label')
         # 设置窗口属性
         self._setup_window()
         

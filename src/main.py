@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from src.config.settings import Settings
 from src.ui.main_window import MainWindow  # 使用绝对导入
-from src.utils.logger import Logger
+from src.utils.logger_factory import LoggerFactory
 
 
 class Application:
@@ -17,29 +17,23 @@ class Application:
     def __init__(self):
         self.app: Optional[QApplication] = None
         self.window: Optional[MainWindow] = None
-        self.settings: Optional[Settings] = None
-        self.logger: Optional[Logger] = None
+        # 1. 初始化配置（全局单例）
+        self.settings = Settings.get_instance()
+        # 2. 初始化日志（全局单例）
+        self.logger = LoggerFactory.get_logger()
 
     def initialize(self) -> bool:
         """初始化应用程序组件"""
         try:
-            # 初始化配置
-            self.settings = Settings()
-
-            # 初始化日志
-            logs_path = self.settings.get_path('logs')
-            self.logger = Logger(logs_path)
-            
-            # 初始化UI
+            # 3. 初始化UI
             self.app = QApplication(sys.argv)
-
-            self.window = MainWindow(self.settings, self.logger)
+            self.window = MainWindow()
 
             self.settings.set('screen', 'width', self._get_screen_width())
             self.settings.set('screen', 'height', self._get_screen_height())
 
             # 应用窗口设置
-            window_settings = self.settings.get_window_settings()
+            window_settings = self.settings.get('window')
             
             # 设置窗口大小
             self.window.resize(

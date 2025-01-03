@@ -7,17 +7,17 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from ...config.settings import Settings
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
-from ...utils.logger import Logger
+from ...utils.logger_factory import LoggerFactory
 
 
 class AutoTab(QWidget):
-    def __init__(self, settings: Settings, logger: Logger, label: FloatingLabel):
+    def __init__(self, label: FloatingLabel):
         super().__init__()
-        self.settings = settings
-        self.logger = logger
+        self.settings = Settings.get_instance()
+        self.logger = LoggerFactory.get_logger()
         self.label = label
 
-        self.worker_thread = WorkerThread(self.settings, self.logger)
+        self.worker_thread = WorkerThread()
         self.is_processing = False
         self.is_switching = False
 

@@ -1,18 +1,21 @@
+import os
 from typing import Dict, Optional, Tuple, List
-import numpy as np
+
 import cv2
 import mss
-import os
+import numpy as np
+
 from ..config.settings import Settings
-from ..utils.logger import Logger
+from ..utils.logger_factory import LoggerFactory
+
 
 class ImageRecognition:
     """图像识别类，用于处理屏幕捕获和图像识别"""
-    
-    def __init__(self, settings: Settings, logger: Logger):
+
+    def __init__(self):
         """初始化截图工具"""
-        self.settings = settings
-        self.logger = logger
+        self.settings = Settings.get_instance()
+        self.logger = LoggerFactory.get_logger()
         self.sct = mss.mss()
     
     def __del__(self):
@@ -45,7 +48,8 @@ class ImageRecognition:
             self.logger.error(f"截图失败: {e}")
             return np.array([])
 
-    def img_read(self, image_path: str) -> Optional[np.ndarray]:
+    @staticmethod
+    def img_read(image_path: str) -> Optional[np.ndarray]:
         """
         读取图像文件
         Args:
@@ -53,22 +57,24 @@ class ImageRecognition:
         Returns:
             Optional[numpy.ndarray]: BGR格式的图像数组，失败返回None
         """
+        logger = LoggerFactory.get_logger()
         try:
             if not image_path or not os.path.exists(image_path):
                 return None
                 
             img = cv2.imread(image_path)
             if img is None:
-                self.logger.error(f"无法读取图像: {image_path}")
+                logger.error(f"无法读取图像: {image_path}")
                 return None
                 
             return img
             
         except Exception as e:
-            self.logger.error(f"读取图像失败 {image_path}: {e}")
+            logger.error(f"读取图像失败 {image_path}: {e}")
             return None
+
+    @staticmethod
     def identify_from_templates(
-        self,
         frame: np.ndarray,
         templates: Dict[str, np.ndarray]
     ) -> str:
@@ -80,11 +86,13 @@ class ImageRecognition:
         Returns:
             str: 识别结果名称，未识别返回'none'
         """
+        settings = Settings.get_instance()
+        logger = LoggerFactory.get_logger()
         # 输入验证
         if frame is None or frame.size == 0 or not templates:
             return 'none'
 
-        recognition = self.settings.get_recognition_settings()
+        recognition = settings.get('recognition')
         threshold = recognition['threshold']
         max_val = 0
         result_name = 'none'
@@ -118,7 +126,7 @@ class ImageRecognition:
             return result_name if max_val >= threshold else 'none'
 
         except Exception as e:
-            self.logger.error(f"图像匹配失败: {e}")
+            logger.error(f"图像匹配失败: {e}")
             return 'none'
 
     def process_region(

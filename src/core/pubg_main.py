@@ -1,15 +1,17 @@
-import keyboard
-import time
 import json
-from typing import Dict, Tuple
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Thread
+from typing import Dict, Tuple
+
+import keyboard
 from pynput import mouse
-from concurrent.futures import ThreadPoolExecutor
-from ..utils.logger import Logger
-from ..utils.constants import translate_name, get_attribute_keys
-from ..core.image_recognition import ImageRecognition
+
 from ..config.settings import Settings
+from ..core.image_recognition import ImageRecognition
+from ..utils.constants import translate_name, get_attribute_keys
+from ..utils.logger_factory import LoggerFactory
 
 
 @dataclass
@@ -36,13 +38,16 @@ class PubgCore():
     MIN_ZOOM = 1.0
     ZOOM_STEP = 0.06
 
-    def __init__(self, settings: Settings, logger: Logger):
+    def __init__(self):
         """初始化"""
-        self.settings = settings
-        self.logger = logger
+        self.settings = Settings.get_instance()
+        self.logger = LoggerFactory.get_logger()
+        self.file_path = (self.settings.get_path('templates') /
+                          (str(self.settings.get("screen", "width"))
+                           + str(self.settings.get("screen", "height"))))
 
         # 确保在创建其他属性之前初始化 image_recognition
-        self.image_recognition = ImageRecognition(self.settings, self.logger)
+        self.image_recognition = ImageRecognition()
         self.state = GameState(results={})
         self.state.off_on_flag = True  # 初始化时设置为True
         self.mouse_listener = None
@@ -58,17 +63,16 @@ class PubgCore():
     def _load_templates(self) -> Dict:
         """加载所有模板图片"""
         self.logger.info("加载模板图片")
-        file_path = self.settings.get_template_path()
         template_dirs = {
-            "poses": f"{file_path}/weapon_templates/poses/",
-            "weapons": f"{file_path}/weapon_templates/weapons/",
-            "muzzles": f"{file_path}/weapon_templates/muzzles/",
-            "grips": f"{file_path}/weapon_templates/grips/",
-            "scopes": f"{file_path}/weapon_templates/scopes/",
-            "stocks": f"{file_path}/weapon_templates/stocks/",
-            "bag": f"{file_path}/weapon_templates/bag/",
-            "car": f"{file_path}/weapon_templates/car/",
-            "shoot": f"{file_path}/weapon_templates/shoot/"
+            "poses": f"{self.file_path}/weapon_templates/poses/",
+            "weapons": f"{self.file_path}/weapon_templates/weapons/",
+            "muzzles": f"{self.file_path}/weapon_templates/muzzles/",
+            "grips": f"{self.file_path}/weapon_templates/grips/",
+            "scopes": f"{self.file_path}/weapon_templates/scopes/",
+            "stocks": f"{self.file_path}/weapon_templates/stocks/",
+            "bag": f"{self.file_path}/weapon_templates/bag/",
+            "car": f"{self.file_path}/weapon_templates/car/",
+            "shoot": f"{self.file_path}/weapon_templates/shoot/"
         }
 
         templates = {}
@@ -87,7 +91,7 @@ class PubgCore():
     def _load_config(self) -> Dict:
         """加载区域配置"""
         self.logger.info("加载识别配置文件")
-        config_path = f"{self.settings.get_template_path()}/config.json"
+        config_path = f"{self.file_path}/config.json"
         with open(config_path, 'r', encoding='utf-8') as file:
             config_data = json.load(file)
         self.logger.info("识别配置文件加载完成")
@@ -145,7 +149,7 @@ class PubgCore():
         while self.state.off_on_flag:
             pose_category, pose_result = self.process_region("poses", region)
             self.state.results[pose_category] = pose_result
-            time.sleep(0.01)
+            time.sleep(10)
 
     def start(self) -> None:
         """启动PUBG核心功能"""
@@ -173,29 +177,29 @@ class PubgCore():
         try:
             # 1. 停止主循环
             self.state.off_on_flag = False
-            self.logger.update_close_progress(1)
+            self.logger.close_progress(1)
             
             # 2. 停止鼠标监听
             if self.mouse_listener:
                 self.mouse_listener.stop()
-            self.logger.update_close_progress(2)
+            self.logger.close_progress(2)
             
             # 3. 等待姿势识别线程关闭
             if self.pose_thread and self.pose_thread.is_alive():
                 self.pose_thread.join(timeout=1.0)
             self.pose_thread = None
             self.logger.info("姿势识别线程停止")
-            self.logger.update_close_progress(3)
+            self.logger.close_progress(3)
             
             # 4. 清理键盘监听
             keyboard.unhook_all()
             self.logger.info("键盘监听停止")
-            self.logger.update_close_progress(4)
+            self.logger.close_progress(4)
 
             # 5. 重置状态
             self.state = GameState(results={})
             self.logger.info("状态重置")
-            self.logger.update_close_progress(5)
+            self.logger.close_progress(5)
             
         except Exception as e:
             self.logger.error(f"停止功能失败: {e}")
@@ -269,7 +273,7 @@ class PubgCore():
         # 循环结束后清理资源
         keyboard.unhook_all()
         self.logger.info("主线程结束，关闭自动识别")
-        self.logger.update_close_progress(6)
+        self.logger.close_progress(6)
 
     def process_recognition(self) -> None:
         """处理识别逻辑"""

@@ -1,211 +1,113 @@
-import json
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+import yaml
+
 
 class Settings:
-    """配置管理类"""
+    """全局设置管理类（单例模式）"""
+
+    _instance: Optional['Settings'] = None
+
+    def __new__(cls) -> 'Settings':
+        """实现单例模式"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
     
-    # 默认配置
-    DEFAULT_CONFIG = {
-        "window": {
-            "width": 600,
-            "height": 600,
-            "opacity": 0.8,
-            "always_on_top": True
-        },
-        "recognition": {
-            "threshold": 0.9,
-            "interval": 0.01,
-            "max_retries": 3
-        },
-        "label": {
-            "font_size": 14,
-            "font_family": "Microsoft YaHei",
-            "background_color": "rgba(0, 0, 0, 150)",
-            "text_color": "white",
-            "opacity": 0.8
-        },
-        "paths": {
-            "templates": "resources/templates",
-            "config": "resources/config",
-            "logs": "logs"
-        }
-    }
-
     def __init__(self):
-        """初始化配置管理器"""
-        self.config_path = self._get_config_path()
-        self.config = self._load_config()
-        self._ensure_directories()
+        """初始化设置（只在第一次创建实例时执行）"""
+        if self._initialized:
+            return
 
-    def _get_base_path(self) -> Path:
-        """获取基础路径
-        在开发环境下返回项目根目录
-        在打包环境下返回可执行文件所在目录
+        self._initialized = True
+        self.config: Dict[str, Any] = {}
+        self.load()
+
+    @classmethod
+    def get_instance(cls) -> 'Settings':
+        """获取Settings实例的类方法"""
+        if cls._instance is None:
+            cls._instance = Settings()
+        return cls._instance
+
+    def get_path(self, path_type: str, create: bool = True) -> Path:
+        """获取指定类型的路径
+        
+        Args:
+            path_type: 路径类型 (logs/config/assets/cache)
+            create: 如果为True且路径不存在，则创建文件夹
+            
+        Returns:
+            Path: 根据运行环境返回开发或打包后的路径
+            
+        Raises:
+            ValueError: 当路径类型未知时抛出
         """
+        paths = self.config.get('paths', {})
+        if path_type not in paths:
+            raise ValueError(f"未知的路径类型: {path_type}")
+
+        # 获取应用根目录
         if getattr(sys, 'frozen', False):
-            # 如果是打包后的环境
-            return Path(sys._MEIPASS)
+            # 打包后的环境
+            base_path = Path(sys._MEIPASS)
         else:
             # 开发环境
-            return Path(__file__).parent.parent.parent
+            base_path = Path(__file__).parent.parent.parent
 
-    def _ensure_directories(self):
-        """确保必要的目录存在"""
-        base_path = self._get_base_path()
-        for path_name, relative_path in self.config['paths'].items():
-            # 构建路径
-            path = base_path / relative_path
+        path = base_path / paths[path_type]
+        if create:
             path.mkdir(parents=True, exist_ok=True)
 
-    def _get_config_path(self) -> Path:
-        """获取配置文件路径"""
-        return self._get_base_path() / "resources/config/config.json"
+        return path
 
-    def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件"""
-        try:
-            if self.config_path.exists():
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    user_config = json.load(f)
-                    # 合并用户配置和默认配置
-                    return self._merge_configs(self.DEFAULT_CONFIG, user_config)
-        except Exception as e:
-            print(f"加载配置文件失败: {e}")
-        
-        return self.DEFAULT_CONFIG.copy()
-
-    def _merge_configs(self, default: Dict, user: Dict) -> Dict:
-        """递归合并配置字典"""
-        result = default.copy()
-        
-        for key, value in user.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._merge_configs(result[key], value)
-            else:
-                result[key] = value
-                
-        return result
-
-    def save(self) -> bool:
-        """保存配置到文件"""
-        try:
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, indent=4, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"保存配置文件失败: {e}")
-            return False
-
-    def get(self, section: str, key: str, default: Any = None) -> Any:
+    def get(self, section: str, key: str = None, default: Any = None) -> Any:
         """获取配置值
         
         Args:
-            section: 配置节名称
-            key: 配置键名
+            section: 配置部分名称
+            key: 配置项名称，如果为None则返回整个部分
             default: 默认值
-            
-        Returns:
-            Any: 配置值
         """
-        try:
-            return self.config[section][key]
-        except KeyError:
-            return default
+        if key is None:
+            return self.config.get(section, default)
 
-    def set(self, section: str, key: str, value: Any) -> bool:
-        """设置配置值
-        
-        Args:
-            section: 配置节名称
-            key: 配置键名
-            value: 配置值
-            
-        Returns:
-            bool: 是否设置成功
-        """
+        section_data = self.config.get(section, {})
+        if isinstance(section_data, dict):
+            return section_data.get(key, default)
+        return default
+
+    def set(self, section: str, key: str, value: Any) -> None:
+        """设置指定配置项的值"""
+        if section not in self.config:
+            self.config[section] = {}
+        self.config[section][key] = value
+        self.save()
+
+    def load(self) -> None:
+        """从YAML文件加载设置"""
         try:
-            if section not in self.config:
-                self.config[section] = {}
-            self.config[section][key] = value
-            return True
+            config_path = Path(__file__).parent.parent.parent / 'resources' / 'config' / 'application.yaml'
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    yaml_config = yaml.safe_load(f)
+                    if yaml_config:
+                        self.config = yaml_config
+            else:
+                raise FileNotFoundError(f"配置文件不存在: {config_path}")
         except Exception as e:
-            print(f"设置配置值失败: {e}")
-            return False
+            print(f"加载设置失败: {e}")
+            raise
 
-    def get_path(self, path_name: str) -> Optional[Path]:
-        """获取特定路径的绝对路径"""
+    def save(self) -> None:
+        """保存设置到YAML文件"""
         try:
-            relative_path = self.get('paths', path_name)
-            if not relative_path:
-                return None
-
-            base_path = self._get_base_path()
-            absolute_path = base_path / relative_path
-            absolute_path.mkdir(parents=True, exist_ok=True)
-            
-            return absolute_path
-            
+            config_path = Path(__file__).parent.parent.parent / 'resources' / 'config' / 'application.yaml'
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True)
         except Exception as e:
-            print(f"获取路径失败 {path_name}: {e}")
-            return None
-
-    def get_template_path(self) -> Optional[Path]:
-        """获取模板路径
-        
-        Args:
-            screen_resolution: 屏幕分辨率
-            
-        Returns:
-            Optional[Path]: 模板路径
-        """
-        templates_path = self.get_path('templates')
-        if templates_path:
-            return templates_path / f"{self.get('screen', 'width')}{self.get('screen', 'height')}"
-        return None
-
-    def get_window_settings(self) -> Dict[str, Any]:
-        """获取窗口设置"""
-        return self.config.get('window', self.DEFAULT_CONFIG['window'])
-
-    def get_recognition_settings(self) -> Dict[str, Any]:
-        """获取识别设置"""
-        return self.config.get('recognition', self.DEFAULT_CONFIG['recognition'])
-
-    def get_label_settings(self) -> Dict[str, Any]:
-        """获取标签设置"""
-        return self.config.get('label', self.DEFAULT_CONFIG['label'])
-
-    def get_screen_settings(self) -> Dict[str, Any]:
-        """获取屏幕设置"""
-        return self.config.get('screen', self.DEFAULT_CONFIG['screen'])
-    
-
-    def reset_section(self, section: str) -> bool:
-        """重置指定配置节
-        
-        Args:
-            section: 配置节名称
-            
-        Returns:
-            bool: 是否重置成功
-        """
-        try:
-            if section in self.DEFAULT_CONFIG:
-                self.config[section] = self.DEFAULT_CONFIG[section].copy()
-                return True
-            return False
-        except Exception as e:
-            print(f"重置配置节失败: {e}")
-            return False
-
-    def reset_all(self) -> bool:
-        """重置所有配置"""
-        try:
-            self.config = self.DEFAULT_CONFIG.copy()
-            return self.save()
-        except Exception as e:
-            print(f"重置所有配置失败: {e}")
-            return False 
+            print(f"保存设置失败: {e}")

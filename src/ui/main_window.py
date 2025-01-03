@@ -1,27 +1,28 @@
-from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon, QPixmap
-import os
+from PyQt5.QtWidgets import QMainWindow, QTabWidget
 
-from .tabs.auto_tab import AutoTab
 # from .tabs.weapon_tab import WeaponTab
 # from .tabs.settings_tab import SettingsTab
 from .label import FloatingLabel
-from ..config.settings import Settings
-from ..utils.logger import Logger
-from .. import __version__, __app_name__
 from .tabs.about_tab import AboutTab
+from .tabs.auto_tab import AutoTab
+from .. import __version__, __app_name__
+from ..config.settings import Settings
+from ..utils.logger_factory import LoggerFactory
+
 
 class MainWindow(QMainWindow):
     """主窗口类"""
-    def __init__(self, settings: Settings, logger: Logger):
+
+    def __init__(self):
         """初始化主窗口"""
         super().__init__()
-        self.settings = settings
-        self.logger = logger
+        self.settings = Settings.get_instance()
+        self.logger = LoggerFactory.get_logger()
 
         # 初始化组件
-        self.label = FloatingLabel(settings)
+        self.label = FloatingLabel()
         self.label.setVisible(False)
 
         self._init_tabs()
@@ -49,8 +50,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tab_widget)
         
         # 创建标签页
-        # self.weapon_tab = WeaponTab(self.settings)
-        self.auto_tab = AutoTab(self.settings, self.logger, self.label)
+        self.auto_tab = AutoTab(self.label)
         
         # 添加标签页
         self.tab_widget.addTab(self.auto_tab, "自动识别")
