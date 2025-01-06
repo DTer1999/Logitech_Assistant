@@ -130,20 +130,24 @@ class ImageRecognition:
         self,
             category: str,
         templates: Dict[str, np.ndarray],
-            region: list
+            region: List[int]
     ) -> Tuple[str, str]:
         """
         处理特定区域的图像识别
         Args:
-            templates: 模板字典
             category: 类别名称
-            region: 截取位置
+            templates: 模板字典
+            region: 截取位置 [x, y, w, h]
         Returns:
             Tuple[str, str]: (类别, 识别结果)
         """
         try:
             frame = self.capture_screen()
-            cropped = frame[region[1]:region[1] + region[3], region[0]:region[0] + region[2]]
+            if frame is None:
+                return category, 'none'
+
+            x, y, w, h = region
+            cropped = frame[y:y + h, x:x + w]
             if cropped is None or cropped.size == 0:
                 return category, 'none'
 
@@ -165,17 +169,15 @@ class ImageRecognition:
         exclude_categories = exclude_categories or []
 
         try:
-            # 使用缓存机制获取frame
             frame = self.capture_screen()
             if frame is not None and frame.size > 0:
-                with ThreadPoolExecutor(max_workers=7) as executor:
+                with ThreadPoolExecutor(max_workers=4) as executor:
                     future_to_category = {
                         executor.submit(
-                            self._process_single_region,
-                            frame,
+                            self.process_region,
                             category,
-                            region,
-                            templates.get(category.split('_')[0], {})
+                            templates.get(category.split('_')[0], {}),
+                            region
                         ): category
                         for category, region in regions.items()
                         if category not in exclude_categories
@@ -184,7 +186,7 @@ class ImageRecognition:
                     for future in as_completed(future_to_category):
                         category = future_to_category[future]
                         try:
-                            result = future.result()
+                            _, result = future.result()
                             results[category] = result
                         except Exception as e:
                             self.logger.error(f"处理区域 {category} 失败: {e}")
@@ -194,24 +196,6 @@ class ImageRecognition:
             self.logger.error(f"批量处理失败: {e}")
 
         return results
-
-    def _process_single_region(
-            self,
-            frame: np.ndarray,
-            category: str,
-            region: List[int],
-            templates: Dict[str, np.ndarray]
-    ) -> str:
-        """处理单个区域的图像识别"""
-        try:
-            # 截取区域
-            x, y, w, h = region
-            cropped = frame[y:y + h, x:x + w]
-            # 进行识别
-            return self.identify_from_templates(cropped, templates)
-        except Exception as e:
-            self.logger.error(f"处理区域失败 {category}: {e}")
-            return 'none'
 
     def cleanup(self):
         """清理资源"""
