@@ -1,12 +1,11 @@
 import os
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Optional, Tuple, List
 
 import cv2
 import numpy as np
 
-from .capture.capture_manager import CaptureManager
+from .capture.screen_capture_thread import ScreenCaptureThread
 from ..config.settings import Settings
 from ..utils.logger_factory import LoggerFactory
 
@@ -15,15 +14,12 @@ class ImageRecognition:
     """图像识别类，用于处理屏幕捕获和图像识别"""
 
     def __init__(self):
-        """初始化截图工具"""
+        """
+        初始化图像识别类
+        """
         self.settings = Settings.get_instance()
         self.logger = LoggerFactory.get_logger()
-        self.capture_manager = CaptureManager()
-        # 添加缓存相关属性
-        self._frame_cache = None
-        self._last_capture_time = 0
-        self._cache_duration = self.settings.get('capture', 'cache_duration', 1.0)  # 默认1秒
-    
+        self.screen_capture = ScreenCaptureThread.get_instance()  # 使用单例
 
     @staticmethod
     def img_read(image_path: str) -> Optional[np.ndarray]:
@@ -107,29 +103,28 @@ class ImageRecognition:
             return 'none'
 
     def capture_screen(self) -> np.ndarray:
-        """捕获屏幕，使用缓存机制"""
-        current_time = time.time()
-
-        # 如果缓存存在且未过期，直接返回缓存
-        if (self._frame_cache is not None and
-                current_time - self._last_capture_time < self._cache_duration):
-            return self._frame_cache.copy()  # 返回副本避免修改缓存
-
+        """
+        捕获屏幕
+        Returns:
+            numpy.ndarray: BGR格式的图像数组
+        """
         try:
-            method = self.settings.get('capture', 'method', 'win32')
-            capture = self.capture_manager.get_capture(method)
-            # 更新缓存和时间戳
-            self._frame_cache = capture.capture()
-            self._last_capture_time = current_time
-            return self._frame_cache.copy()
+            # 直接从屏幕捕获线程获取最新帧
+            frame = self.screen_capture.get_frame()
+            if frame is not None:
+                return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+            else:
+                self.logger.error("获取屏幕捕获失败: 无效帧")
+                return None
+            
         except Exception as e:
             self.logger.error(f"捕获屏幕失败: {e}")
-            self._frame_cache = None  # 清除可能的无效缓存
-    
+            return None
+
     def process_region(
         self,
             category: str,
-        templates: Dict[str, np.ndarray],
+            templates: Dict[str, np.ndarray],
             region: List[int]
     ) -> Tuple[str, str]:
         """
@@ -199,5 +194,4 @@ class ImageRecognition:
 
     def cleanup(self):
         """清理资源"""
-        self._frame_cache = None
         self.capture_manager.cleanup()

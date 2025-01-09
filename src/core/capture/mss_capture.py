@@ -1,6 +1,3 @@
-import threading
-
-import cv2
 import mss
 import numpy as np
 
@@ -11,46 +8,50 @@ class MSSCapture(BaseCapture):
     """使用MSS的截图实现"""
 
     def __init__(self):
-        self._local = threading.local()
         super().__init__()
         self.method = 'mss'
+        self.mss = None
+        self.monitor = None
+        self.initialize()
 
     def initialize(self) -> bool:
         """初始化MSS"""
         try:
-            if not hasattr(self._local, 'mss') or self._local.mss is None:
-                self._local.mss = mss.mss()
-                # 获取主显示器
-                self._local.monitor = self._local.mss.monitors[1]  # monitors[0]是所有显示器的组合
+            # 每次初始化都创建新的 mss 实例
+            if self.mss is not None:
+                self.cleanup()
+
+            self.mss = mss.mss()
+            # 获取主显示器
+            self.monitor = self.mss.monitors[1]  # monitors[0]是所有显示器的组合
             return True
         except Exception as e:
             self.logger.error(f"初始化MSS截图失败: {e}")
+            self.cleanup()
             return False
 
     def capture(self) -> np.ndarray:
         try:
-            # 确保 MSS 实例存在
-            if not hasattr(self._local, 'mss') or self._local.mss is None:
-                self.initialize()
+            # 如果 mss 实例不存在，重新初始化
+            if self.mss is None:
+                if not self.initialize():
+                    return None
 
-            # 截取全屏
-            screenshot = np.array(self._local.mss.grab(self._local.monitor))
-
-            # 转换颜色空间
-            return cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            # 截取全屏，直接返回BGRA格式
+            return np.array(self.mss.grab(self.monitor))
 
         except Exception as e:
             self.logger.error(f"MSS截图失败: {str(e)}")
-            # 尝试重新初始化
-            self._local.mss = None
-            self.initialize()
-            raise
+            # 发生错误时清理并重新初始化
+            self.cleanup()
+            return None
 
     def cleanup(self):
         """清理MSS资源"""
         try:
-            if hasattr(self._local, 'mss') and self._local.mss is None:
-                self._local.mss.close()
-                self._local.mss = None
+            if self.mss is not None:
+                self.mss.close()
+                self.mss = None
+                self.monitor = None
         except Exception as e:
             self.logger.error(f"清理MSS截图资源失败: {e}")

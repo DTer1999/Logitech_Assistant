@@ -3,10 +3,11 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog,
-                             QComboBox)
+                             QComboBox, QMessageBox, QSlider)
 
 from ...config.settings import Settings
 from ...core.capture.capture_manager import CaptureManager
+from ...core.capture.screen_capture_thread import ScreenCaptureThread
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
 from ...utils.logger_factory import LoggerFactory
@@ -17,6 +18,7 @@ class AutoTab(QWidget):
         super().__init__()
         self.settings = Settings.get_instance()
         self.logger = LoggerFactory.get_logger()
+        self.screen_capture = ScreenCaptureThread.get_instance()
         self.label = label
 
         self.worker_thread = WorkerThread()
@@ -43,34 +45,42 @@ class AutoTab(QWidget):
     def setup_ui(self):
         main_layout = QGridLayout()
         main_layout.setSpacing(10)
-        main_layout.setContentsMargins(10, 5, 10, 10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
 
         # 右上角的控制区域
         top_right = QHBoxLayout()
-        top_right.addStretch()  # 左侧弹性空间，将控件推到右侧
+        top_right.setContentsMargins(0, 0, 0, 0)
+        top_right.addStretch()
         
         self.show_cb = QCheckBox("开启Label")
-        self.show_cb.clicked.connect(self.show_hide_label)
-
         self.always_on_top_cb = QCheckBox("置顶")
-        self.always_on_top_cb.clicked.connect(self.toggle_always_on_top)
 
-        # 从右到左添加控件
-        top_right.addWidget(self.always_on_top_cb)  # 置顶复选框
-        top_right.addWidget(self.show_cb)  # 显示Label复选框
-        top_right.addSpacing(10)  # 右侧边距
+        # 设置复选框的固定高度
+        self.show_cb.setFixedHeight(20)
+        self.always_on_top_cb.setFixedHeight(20)
 
-        # 创建容器并设置布局
+        # 连接信号
+        self.show_cb.stateChanged.connect(self.show_hide_label)
+        self.always_on_top_cb.stateChanged.connect(self.toggle_always_on_top)
+
+        top_right.addWidget(self.always_on_top_cb)
+        top_right.addWidget(self.show_cb)
+        # top_right.addSpacing(10)
+
         top_right_widget = QWidget()
         top_right_widget.setLayout(top_right)
-        top_right_widget.setContentsMargins(0, 0, 0, 0)  # 移除容器边距
+        top_right_widget.setFixedHeight(20)
+        top_right_widget.setContentsMargins(0, 0, 0, 0)
 
         # 将容器添加到主布局的右上角
         main_layout.addWidget(top_right_widget, 0, 0, 1, 3, Qt.AlignRight)
+        main_layout.setRowMinimumHeight(0, 20)
 
-        # 创建1号和2号区域
+        # 创建1号区域
         group1, self.weapon1_labels = self.create_weapon_group("1号")
+        group1.setFixedHeight(150)
         main_layout.addWidget(group1, 1, 0, 1, 2)
+        main_layout.setRowStretch(1, 0)
 
         # 日志区域
         log_group = QGroupBox("日志")
@@ -78,37 +88,24 @@ class AutoTab(QWidget):
         self.text_browser = QTextBrowser()
         log_layout.addWidget(self.text_browser)
         log_group.setLayout(log_layout)
-        main_layout.addWidget(log_group, 1, 2)
+        main_layout.addWidget(log_group, 1, 2, 3, 1)  # 日志区域跨3行
 
+        # 创建2号区域
         group2, self.weapon2_labels = self.create_weapon_group("2号")
-        main_layout.addWidget(group2, 2, 0, 2, 2)
+        group2.setFixedHeight(150)
+        main_layout.addWidget(group2, 2, 0, 1, 2)
 
-        main_layout.addWidget(self.init_capture_methods(), 2, 2, 1, 1, Qt.AlignTop)
-
-        # 右下角控制按钮组
-        control_group = QGroupBox()
-        control_layout = QHBoxLayout()
-        # control_layout.setContentsMargins(10, 5, 10, 5)
-
-        self.switch_button = QPushButton('开启')
-        self.switch_button.setCheckable(True)
-        self.switch_button.setChecked(False)
-        self.switch_button.clicked.connect(self.switch_button_clicked)
-
-        self.exit_button = QPushButton("退出")
-        self.exit_button.clicked.connect(self.handle_exit)
-
-        control_layout.addWidget(self.switch_button)
-        control_layout.addWidget(self.exit_button)
-
-        control_group.setLayout(control_layout)
-        main_layout.addWidget(control_group, 3, 2, Qt.AlignBottom)
+        # 创建录制控制
+        self.recording_control = self.setup_recording_control()
+        self.recording_control.setFixedHeight(120)
+        main_layout.addWidget(self.recording_control, 3, 0, 1, 2)
+        
 
         # 当前武器区域
         weapon_widget = QWidget()
         weapon_layout = QHBoxLayout()
-
-        # 添加开火状态显示
+        weapon_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.shoot_status_label = QLabel("未开火")
         self.shoot_status_label.setFixedWidth(60)
         weapon_layout.addWidget(self.shoot_status_label)
@@ -120,22 +117,110 @@ class AutoTab(QWidget):
         weapon_widget.setLayout(weapon_layout)
         main_layout.addWidget(weapon_widget, 4, 0, 1, 2)
 
+        # 控制按钮组（独立的框）
+        control_group = QGroupBox()
+        control_layout = QHBoxLayout()
+        control_layout.setContentsMargins(10, 5, 10, 5)
+
+        self.switch_button = QPushButton('开启')
+        self.switch_button.setCheckable(True)
+        self.switch_button.setChecked(False)
+        self.switch_button.clicked.connect(self.switch_button_clicked)
+
+        self.exit_button = QPushButton("退出")
+        self.exit_button.clicked.connect(self.handle_exit)
+
+        control_layout.addWidget(self.switch_button)
+        control_layout.addWidget(self.exit_button)
+        control_group.setLayout(control_layout)
+        main_layout.addWidget(control_group, 4, 2, 1, 1)  # 按钮组放在日志区域下方
+
         # 设置列的拉伸因子
         main_layout.setColumnStretch(0, 1)
         main_layout.setColumnStretch(1, 1)
         main_layout.setColumnStretch(2, 1)
 
-        # 设置行的拉伸因子
-        main_layout.setRowStretch(1, 10)
-        main_layout.setRowStretch(2, 10)
-        main_layout.setRowStretch(3, 1)
-
         self.setLayout(main_layout)
+
+    def setup_recording_control(self):
+        control_widget = QWidget()
+        control_bar = QHBoxLayout()
+        control_bar.setSpacing(20)
+        control_widget.setLayout(control_bar)
+
+        # 左侧截图方式选择
+        method_layout = QHBoxLayout()
+        method_layout.setContentsMargins(0, 0, 0, 0)
+        capture_label = QLabel("方式:")
+
+        self.capture_combo = QComboBox()
+        self.capture_combo.setFixedSize(80, 25)
+
+        # 获取所有可用的截图方式
+        capture_methods = CaptureManager().get_capture_methods()
+        for method_id, method_class in capture_methods.items():
+            self.capture_combo.addItem(method_id, method_id)
+
+        # 设置当前选中的截图方式
+        current_method = self.settings.get('capture', 'method', list(capture_methods.keys())[0])
+        index = self.capture_combo.findData(current_method)
+        if index >= 0:
+            self.capture_combo.setCurrentIndex(index)
+
+        # 连接信号
+        self.capture_combo.currentIndexChanged.connect(self.on_capture_method_changed)
+
+        method_layout.addWidget(capture_label)
+        method_layout.addWidget(self.capture_combo)
+
+        # 右侧FPS设置
+        fps_layout = QHBoxLayout()
+        fps_layout.setContentsMargins(0, 0, 0, 0)
+        fps_label = QLabel("FPS:")
+        fps_label.setStyleSheet("margin-left: 20px;")
+
+        # FPS值显示标签
+        self.fps_value_label = QLabel("60")
+        self.fps_value_label.setStyleSheet("margin-left: 5px;")
+
+        # FPS滑动条
+        self.fps_slider = QSlider(Qt.Horizontal)
+        self.fps_slider.setFixedWidth(120)
+        self.fps_slider.setMinimum(1)
+        self.fps_slider.setMaximum(60)
+        self.fps_slider.setPageStep(5)
+
+        # 设置当前FPS值
+        current_fps = self.settings.get('capture', 'fps', 5)
+        self.fps_slider.setValue(current_fps)
+        self.fps_value_label.setText(str(current_fps))
+
+        # 连接滑动条信号
+        self.fps_slider.valueChanged.connect(self.on_fps_value_display)
+        self.fps_slider.sliderReleased.connect(self.on_fps_changed)
+
+        fps_layout.addWidget(fps_label)
+        fps_layout.addWidget(self.fps_slider)
+        fps_layout.addWidget(self.fps_value_label)
+
+        # 添加到控制栏
+        left_container = QWidget()
+        left_container.setLayout(method_layout)
+        right_container = QWidget()
+        right_container.setLayout(fps_layout)
+
+        control_bar.addWidget(left_container, 0, Qt.AlignLeft)
+        control_bar.addStretch(1)
+        control_bar.addWidget(right_container, 0, Qt.AlignRight)
+
+        return control_widget
+    
 
     def create_weapon_group(self, title):
         group = QGroupBox(title)
         group_layout = QVBoxLayout()
-        group.setMinimumHeight(200)
+        group_layout.setSpacing(10)
+        group_layout.setContentsMargins(10, 10, 10, 10)
         
         labels = []
         top_attrs_layout = QHBoxLayout()
@@ -218,12 +303,16 @@ class AutoTab(QWidget):
         """执行开关步骤"""
         try:
             if checked:
+                self.capture_combo.setDisabled(True)
+                self.fps_slider.setDisabled(True)
                 # 直接启动工作线程
                 if not self.worker_thread.is_alive():
                     self.worker_thread.start()
+                self.start_capture_thread()
                 self.switch_button.setText("关闭")
-                
             else:
+                self.capture_combo.setDisabled(False)
+                self.fps_slider.setDisabled(False)
                 if self.worker_thread.is_alive():
                     # 创建关闭进度对话框
                     self.close_progress = QProgressDialog("正在关闭...", None, 0, 7, self)
@@ -237,7 +326,7 @@ class AutoTab(QWidget):
                     self.close_progress.setValue(0)
 
                     self.worker_thread.stop_signal.emit()
-                    
+                self.stop_capture_thread()
                 self.switch_button.setText("开启")
         except Exception as e:
             print(f"执行开关步骤失败: {e}")
@@ -268,7 +357,8 @@ class AutoTab(QWidget):
             # 如果线程正在运行，先停止它
             if self.worker_thread and self.worker_thread.isRunning():
                 self.worker_thread.stop_signal.emit()
-            
+
+            # self.recording_control.handle_exit()
         except Exception as e:
             self.logger.error(f"退出处理失败: {e}")
         finally:
@@ -313,37 +403,46 @@ class AutoTab(QWidget):
         window.move(pos)
         window.show()
 
-    def init_capture_methods(self):
-        capture_group = QGroupBox("操作")
-        capture_layout = QHBoxLayout()
-        # capture_layout.setContentsMargins(10, 5, 10, 5)  # 设置统一的内边距
-        capture_label = QLabel("截图方式:")
-        self.capture_combo = QComboBox()
-        """初始化截图方式下拉框"""
-        # 获取所有可用的截图方式
-        capture_methods = CaptureManager().get_capture_methods()
-
-        # 添加到下拉框
-        for display_name, method_id in capture_methods.items():
-            self.capture_combo.addItem(display_name, display_name)
-
-        # 设置当前选中的方式
-        current_method = self.settings.get('capture', 'method', 'win32')
-        index = self.capture_combo.findText(current_method)
-        if index >= 0:
-            self.capture_combo.setCurrentIndex(index)
-        self.capture_combo.currentIndexChanged.connect(self.on_capture_method_changed)
-        capture_layout.addWidget(capture_label)
-        capture_layout.addWidget(self.capture_combo)
-        capture_group.setLayout(capture_layout)
-        return capture_group
-
+    def handle_capture_error(self, error_msg: str):
+        """处理捕获错误"""
+        self.logger.error(f"屏幕捕获错误: {error_msg}")
+        QMessageBox.critical(self, "错误", f"屏幕捕获错误: {error_msg}")
     def on_capture_method_changed(self, index: int):
         """截图方式改变时的处理"""
         try:
             method = self.capture_combo.currentData()
+            self.screen_capture.set_method(method)
             self.settings.set('capture', 'method', method)
             self.logger.info(f"截图方式已更改为: {method}")
-
         except Exception as e:
             self.logger.error(f"更改截图方式时出错: {e}")
+
+    def on_fps_value_display(self, value: int):
+        """FPS值实时显示"""
+        self.fps_value_label.setText(str(value))
+
+    def on_fps_changed(self):
+        """FPS改变时的处理（滑动结束时）"""
+        try:
+            value = self.fps_slider.value()
+            self.screen_capture.set_fps(value)
+            self.settings.set('capture', 'fps', value)
+            self.settings.save()
+            self.logger.info(f"FPS已更改为: {value}")
+        except Exception as e:
+            self.logger.error(f"更改FPS时出错: {e}")
+
+    def start_capture_thread(self):
+        """启动截图线程"""
+        try:
+            if not self.screen_capture.is_active():
+                self.screen_capture.start()
+        except Exception as e:
+            self.logger.error(f"启动截图线程失败: {e}")
+
+    def stop_capture_thread(self):
+        """停止截图线程"""
+        try:
+            self.screen_capture.stop()
+        except Exception as e:
+            self.logger.error(f"停止截图线程失败: {e}")

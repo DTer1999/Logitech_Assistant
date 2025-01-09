@@ -1,11 +1,9 @@
-import cv2
 import numpy as np
 import win32con
 import win32gui
 import win32ui
 
 from .base_capture import BaseCapture
-from ...config.settings import Settings
 
 
 class Win32Capture(BaseCapture):
@@ -18,9 +16,9 @@ class Win32Capture(BaseCapture):
         self.hwndDC = None
         self.mfcDC = None
         self.saveDC = None
-        self.settings = Settings.get_instance()
         self.screen_width = self.settings.get('capture', 'screen_width', 2560)
         self.screen_height = self.settings.get('capture', 'screen_height', 1440)
+        self.initialize()
 
     def initialize(self) -> bool:
         """初始化截图资源"""
@@ -52,7 +50,7 @@ class Win32Capture(BaseCapture):
                 win32con.SRCCOPY
             )
 
-            # 转换为numpy数组
+            # 转换为numpy数组，直接返回BGRA格式
             bmpinfo = saveBitMap.GetInfo()
             bmpstr = saveBitMap.GetBitmapBits(True)
             img = np.frombuffer(bmpstr, dtype='uint8')
@@ -61,8 +59,8 @@ class Win32Capture(BaseCapture):
             # 清理位图资源
             win32gui.DeleteObject(saveBitMap.GetHandle())
 
-            # 转换为BGR格式
-            return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+            # 直接返回BGRA格式
+            return img
 
         except Exception as e:
             self.logger.error(f"Win32截图失败: {e}")
