@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
 
-from src.config.settings import Settings
+from src.config.settings import ConfigManager
 
 
 class FloatingLabel(QWidget):
@@ -13,7 +13,7 @@ class FloatingLabel(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         """初始化浮动标签"""
         super().__init__(parent)
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         self.label_settings = self.settings.get('label')
         # 设置窗口属性
         self._setup_window()

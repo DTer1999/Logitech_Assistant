@@ -5,20 +5,19 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog,
                              QComboBox, QMessageBox, QSlider)
 
-from ...config.settings import Settings
-from ...core.capture.capture_manager import CaptureManager
-from ...core.capture.screen_capture_thread import ScreenCaptureThread
+from ...core.frame_client import FrameClient
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
 from ...utils.logger_factory import LoggerFactory
+from ....config.settings import ConfigManager
+from ....screen_capture.capture_manager import CaptureManager
 
 
 class AutoTab(QWidget):
     def __init__(self, label: FloatingLabel):
         super().__init__()
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         self.logger = LoggerFactory.get_logger()
-        self.screen_capture = ScreenCaptureThread.get_instance()
         self.label = label
 
         self.worker_thread = WorkerThread()
@@ -34,6 +33,10 @@ class AutoTab(QWidget):
 
         # 4. 关闭进度信号 -> update_close_progress
         self.logger.close_progress_signal.connect(self.update_close_progress)
+
+        # 5. 连接到后台进程
+        self.frame_client = FrameClient.get_instance()
+        self.frame_client.connect()
 
         self.weapon1_labels = []  # “1号”武器的5个标签
         self.weapon2_labels = []  # “2号”武器的5个标签
@@ -161,8 +164,9 @@ class AutoTab(QWidget):
         for method_id, method_class in capture_methods.items():
             self.capture_combo.addItem(method_id, method_id)
 
+        capture_config = ConfigManager("capture_config")
         # 设置当前选中的截图方式
-        current_method = self.settings.get('capture', 'method', list(capture_methods.keys())[0])
+        current_method = capture_config.get('capture', 'method', list(capture_methods.keys())[0])
         index = self.capture_combo.findData(current_method)
         if index >= 0:
             self.capture_combo.setCurrentIndex(index)
@@ -191,7 +195,7 @@ class AutoTab(QWidget):
         self.fps_slider.setPageStep(5)
 
         # 设置当前FPS值
-        current_fps = self.settings.get('capture', 'fps', 5)
+        current_fps = capture_config.get('capture', 'fps', 5)
         self.fps_slider.setValue(current_fps)
         self.fps_value_label.setText(str(current_fps))
 
@@ -308,7 +312,8 @@ class AutoTab(QWidget):
                 # 直接启动工作线程
                 if not self.worker_thread.is_alive():
                     self.worker_thread.start()
-                self.start_capture_thread()
+                # self.process_manager.start()
+                # self.start_capture_thread()
                 self.switch_button.setText("关闭")
             else:
                 self.capture_combo.setDisabled(False)
@@ -326,7 +331,9 @@ class AutoTab(QWidget):
                     self.close_progress.setValue(0)
 
                     self.worker_thread.stop_signal.emit()
-                self.stop_capture_thread()
+                # self.process_manager.stop()
+
+                # self.stop_capture_thread()
                 self.switch_button.setText("开启")
         except Exception as e:
             print(f"执行开关步骤失败: {e}")
@@ -357,8 +364,7 @@ class AutoTab(QWidget):
             # 如果线程正在运行，先停止它
             if self.worker_thread and self.worker_thread.isRunning():
                 self.worker_thread.stop_signal.emit()
-
-            # self.recording_control.handle_exit()
+            # self.process_manager.stop()
         except Exception as e:
             self.logger.error(f"退出处理失败: {e}")
         finally:
@@ -407,12 +413,12 @@ class AutoTab(QWidget):
         """处理捕获错误"""
         self.logger.error(f"屏幕捕获错误: {error_msg}")
         QMessageBox.critical(self, "错误", f"屏幕捕获错误: {error_msg}")
+
     def on_capture_method_changed(self, index: int):
         """截图方式改变时的处理"""
         try:
             method = self.capture_combo.currentData()
-            self.screen_capture.set_method(method)
-            self.settings.set('capture', 'method', method)
+            self.frame_client.set_capture_method(method)
             self.logger.info(f"截图方式已更改为: {method}")
         except Exception as e:
             self.logger.error(f"更改截图方式时出错: {e}")
@@ -425,24 +431,7 @@ class AutoTab(QWidget):
         """FPS改变时的处理（滑动结束时）"""
         try:
             value = self.fps_slider.value()
-            self.screen_capture.set_fps(value)
-            self.settings.set('capture', 'fps', value)
-            self.settings.save()
+            self.frame_client.set_fps(value)
             self.logger.info(f"FPS已更改为: {value}")
         except Exception as e:
             self.logger.error(f"更改FPS时出错: {e}")
-
-    def start_capture_thread(self):
-        """启动截图线程"""
-        try:
-            if not self.screen_capture.is_active():
-                self.screen_capture.start()
-        except Exception as e:
-            self.logger.error(f"启动截图线程失败: {e}")
-
-    def stop_capture_thread(self):
-        """停止截图线程"""
-        try:
-            self.screen_capture.stop()
-        except Exception as e:
-            self.logger.error(f"停止截图线程失败: {e}")

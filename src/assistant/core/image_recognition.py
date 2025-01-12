@@ -5,9 +5,9 @@ from typing import Dict, Optional, Tuple, List
 import cv2
 import numpy as np
 
-from .capture.screen_capture_thread import ScreenCaptureThread
-from ..config.settings import Settings
+from .frame_client import FrameClient
 from ..utils.logger_factory import LoggerFactory
+from ...config.settings import ConfigManager
 
 
 class ImageRecognition:
@@ -17,9 +17,8 @@ class ImageRecognition:
         """
         初始化图像识别类
         """
-        self.settings = Settings.get_instance()
         self.logger = LoggerFactory.get_logger()
-        self.screen_capture = ScreenCaptureThread.get_instance()  # 使用单例
+        self.template_cache = {}
 
     @staticmethod
     def img_read(image_path: str) -> Optional[np.ndarray]:
@@ -59,7 +58,7 @@ class ImageRecognition:
         Returns:
             str: 识别结果名称，未识别返回'none'
         """
-        settings = Settings.get_instance()
+        settings = ConfigManager('config')
         logger = LoggerFactory.get_logger()
         # 输入验证
         if frame is None or frame.size == 0 or not templates:
@@ -69,28 +68,14 @@ class ImageRecognition:
         threshold = recognition['threshold']
         max_val = 0
         result_name = 'none'
-
         try:
             # 遍历所有模板进行匹配
             for name, template in templates.items():
                 if template is None or template.size == 0:
                     continue
-
-                # 确保frame和template具有相同的通道数
-                if len(frame.shape) != len(template.shape):
-                    if len(frame.shape) == 3:
-                        template = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR)
-                    else:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                # 确保尺寸合适
-                if template.shape[0] > frame.shape[0] or template.shape[1] > frame.shape[1]:
-                    continue
-
                 # 模板匹配
                 result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
                 _, val, _, _ = cv2.minMaxLoc(result)
-
                 # 更新最佳匹配
                 if val > max_val:
                     max_val = val
@@ -109,17 +94,13 @@ class ImageRecognition:
             numpy.ndarray: BGR格式的图像数组
         """
         try:
-            # 直接从屏幕捕获线程获取最新帧
-            frame = self.screen_capture.get_frame()
-            if frame is not None:
-                return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-            else:
-                self.logger.error("获取屏幕捕获失败: 无效帧")
+            # 从共享内存获取完整帧
+            frame = FrameClient.get_instance().get_frame()
+            if frame is None:
                 return None
-            
+            return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         except Exception as e:
             self.logger.error(f"捕获屏幕失败: {e}")
-            return None
 
     def process_region(
         self,
@@ -164,28 +145,28 @@ class ImageRecognition:
         exclude_categories = exclude_categories or []
 
         try:
-            frame = self.capture_screen()
-            if frame is not None and frame.size > 0:
-                with ThreadPoolExecutor(max_workers=4) as executor:
-                    future_to_category = {
-                        executor.submit(
-                            self.process_region,
-                            category,
-                            templates.get(category.split('_')[0], {}),
-                            region
-                        ): category
-                        for category, region in regions.items()
-                        if category not in exclude_categories
-                    }
+            # frame = self.capture_screen()
+            # if frame is not None and frame.size > 0:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                future_to_category = {
+                    executor.submit(
+                        self.process_region,
+                        category,
+                        templates.get(category.split('_')[0], {}),
+                        region
+                    ): category
+                    for category, region in regions.items()
+                    if category not in exclude_categories
+                }
 
-                    for future in as_completed(future_to_category):
-                        category = future_to_category[future]
-                        try:
-                            _, result = future.result()
-                            results[category] = result
-                        except Exception as e:
-                            self.logger.error(f"处理区域 {category} 失败: {e}")
-                            results[category] = 'none'
+                for future in as_completed(future_to_category):
+                    category = future_to_category[future]
+                    try:
+                        _, result = future.result()
+                        results[category] = result
+                    except Exception as e:
+                        self.logger.error(f"处理区域 {category} 失败: {e}")
+                        results[category] = 'none'
                             
         except Exception as e:
             self.logger.error(f"批量处理失败: {e}")

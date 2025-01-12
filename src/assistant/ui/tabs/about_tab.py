@@ -3,7 +3,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTextBrowser,
                              QSpacerItem, QSizePolicy)
 
-from ... import __version__, __app_name__, __author__, __email__, __github__
+from .... import __version__, __app_name__, __author__, __email__, __github__
 
 
 class AboutTab(QWidget):

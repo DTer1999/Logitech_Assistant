@@ -1,33 +1,46 @@
 import json
 import time
 from dataclasses import dataclass
-from threading import Thread
+from threading import Thread, Lock, Event
 from typing import Dict
 
 import keyboard
 from pynput import mouse
 
-from ..config.settings import Settings
 from ..core.image_recognition import ImageRecognition
 from ..utils.constants import translate_name, get_attribute_keys
 from ..utils.logger_factory import LoggerFactory
+from ...config.settings import ConfigManager
 
 
 @dataclass
 class GameState:
     """游戏状态数据类"""
-    scope_zoom: float = 1.0
-    right_button_pressed: bool = False
-    current_weapon: str = "rifle"
-    current_scope: str = "none"
-    is_recognizing: bool = False
-    off_on_flag: bool = True
-    results: Dict = None
 
-    def __post_init__(self):
-        """初始化后处理"""
-        if self.results is None:
-            self.results = {}
+    def __init__(self):
+        self.scope_zoom: float = 1.0
+        self.right_button_pressed: bool = False
+        self.current_weapon: str = "rifle"
+        self.current_scope: str = "none"
+        self.is_recognizing: bool = False
+        self.off_on_flag: bool = True
+        self.results: Dict = {}
+        self._lock = Lock()
+        self._stop_event = Event()  # 添加事件用于线程同步
+
+    def set_off_on_flag(self, value: bool) -> None:
+        """线程安全地设置 off_on_flag"""
+        with self._lock:
+            self.off_on_flag = value
+            if not value:
+                self._stop_event.set()  # 设置停止事件
+            else:
+                self._stop_event.clear()  # 清除停止事件
+
+    def get_off_on_flag(self) -> bool:
+        """线程安全地获取 off_on_flag"""
+        with self._lock:
+            return self.off_on_flag
 
 class PubgCore():
     """PUBG游戏核心类"""
@@ -39,7 +52,7 @@ class PubgCore():
 
     def __init__(self):
         """初始化"""
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         self.logger = LoggerFactory.get_logger()
         self.file_path = (self.settings.get_path('templates') /
                           (str(self.settings.get("screen", "width"))
@@ -47,7 +60,7 @@ class PubgCore():
 
         # 确保在创建其他属性之前初始化 image_recognition
         self.image_recognition = ImageRecognition()
-        self.state = GameState(results={})
+        self.state = GameState()
         self.state.off_on_flag = True  # 初始化时设置为True
         self.mouse_listener = None
         self.pose_thread = None
@@ -134,19 +147,22 @@ class PubgCore():
             self.state.right_button_pressed = False
 
     def identify_pose(self, region: list) -> None:
-        """持识别姿势"""
-        while self.state.off_on_flag:
-            pose_category, pose_result = self.image_recognition.process_region(
-                "poses",
-                self.templates["poses"],
-                region
-            )
-            self.state.results[pose_category] = pose_result
-            time.sleep(10)
+        """持续识别姿势"""
+        try:
+            while self.state.get_off_on_flag():
+                pose_category, pose_result = self.image_recognition.process_region(
+                    "poses",
+                    self.templates["poses"],
+                    region
+                )
+                self.state.results[pose_category] = pose_result
+        except Exception as e:
+            self.logger.error(f"姿势识别线程异常: {e}")
+        finally:
+            self.logger.info("姿势识别线程正常退出")
 
     def start(self) -> None:
-        """启动PUBG核心功能"""
-        self.state.off_on_flag = True
+        self.state.set_off_on_flag(True)  # 使用setter方法
 
         # 启动鼠标监听
         self.mouse_listener = mouse.Listener(
@@ -166,36 +182,53 @@ class PubgCore():
         self.init_pubg()
 
     def stop(self) -> None:
-        """停止PUBG核心功能"""
         try:
-            # 1. 停止主循环
-            self.state.off_on_flag = False
+            # 0. 初始进度
+            self.logger.close_progress(0)
+
+            # 1. 设置停止标志
+            self.state.set_off_on_flag(False)
+            self.logger.info("停止标志已设置")
             self.logger.close_progress(1)
             
             # 2. 停止鼠标监听
-            if self.mouse_listener:
+            if hasattr(self, 'mouse_listener') and self.mouse_listener:
                 self.mouse_listener.stop()
+                self.logger.info("鼠标监听已停止")
             self.logger.close_progress(2)
             
             # 3. 等待姿势识别线程关闭
-            if self.pose_thread and self.pose_thread.is_alive():
-                self.pose_thread.join(timeout=1.0)
-            self.pose_thread = None
-            self.logger.info("姿势识别线程停止")
+            if hasattr(self, 'pose_thread') and self.pose_thread and self.pose_thread.is_alive():
+                self.logger.info("等待姿势识别线程关闭...")
+                self.pose_thread.join(timeout=3.0)  # 等待最多3秒
+                if self.pose_thread.is_alive():
+                    self.pose_thread.terminate()
+                    self.logger.warning("姿势识别线程未能正常关闭")
+                self.pose_thread = None
+                self.logger.info("姿势识别线程已停止")
             self.logger.close_progress(3)
             
             # 4. 清理键盘监听
             keyboard.unhook_all()
-            self.logger.info("键盘监听停止")
+            self.logger.info("键盘监听已停止")
             self.logger.close_progress(4)
 
             # 5. 重置状态
-            self.state = GameState(results={})
-            self.logger.info("状态重置")
+            self.state = GameState()
+            self.logger.info("状态已重置")
             self.logger.close_progress(5)
+
+            # 6. 最终清理
+            self.logger.info("停止过程完成")
+            self.logger.close_progress(6)
+
+            # 7. 完成
+            self.logger.close_progress(7)
             
         except Exception as e:
             self.logger.error(f"停止功能失败: {e}")
+            # 确保进度条能够关闭
+            self.logger.close_progress(7)
 
     def write_files(self, results: Dict) -> None:
         """将识别结果写入文件"""
@@ -235,7 +268,7 @@ class PubgCore():
         keyboard.on_press_key('tab', self.toggle_recognition)
         keyboard.on_press_key('esc', self.close_recognition)
 
-        while self.state.off_on_flag:
+        while self.state.get_off_on_flag():
             if keyboard.is_pressed('1'):
                 if self.state.current_weapon != "rifle":
                     self.state.current_weapon = "rifle"

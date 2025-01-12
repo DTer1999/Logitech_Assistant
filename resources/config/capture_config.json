@@ -1,0 +1,16 @@
+{
+  "capture": {
+    "fps": 10,
+    "method": "dxgi",
+    "memory_name": "ScreenCaptureMemory_1736689518_e1ba9fa0"
+  },
+  "paths": {
+    "dll": "resources/dll",
+    "logs": "logs"
+  },
+  "frame_shape": {
+    "width": 2560,
+    "height": 1440,
+    "channels": 3
+  }
+}

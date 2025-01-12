@@ -1,10 +1,10 @@
 import threading
 from typing import Dict, Type
 
-from .base_capture import BaseCapture
-from .dxgi_capture import DXGICapture
-from .win32_capture import Win32Capture
-from ...utils.logger_factory import LoggerFactory
+from src.screen_capture.capture.base_capture import BaseCapture
+from src.screen_capture.capture.dxgi_capture import DXGICapture
+from src.screen_capture.capture.win32_capture import Win32Capture
+from src.screen_capture.utils.process_logger import ProcessLogger
 
 
 class CaptureManager:
@@ -12,7 +12,7 @@ class CaptureManager:
 
     def __init__(self):
         self._local = threading.local()
-        self.logger = LoggerFactory.get_logger()
+        self.logger = ProcessLogger.get_instance()
         self._capture_classes: Dict[str, Type[BaseCapture]] = {
             'win32': Win32Capture,
             'dxgi': DXGICapture

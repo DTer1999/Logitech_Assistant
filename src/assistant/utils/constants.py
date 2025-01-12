@@ -1,5 +1,6 @@
-from typing import Dict, List
 from enum import Enum, auto
+from typing import Dict, List
+
 
 class WeaponType(Enum):
     """武器类型枚举"""

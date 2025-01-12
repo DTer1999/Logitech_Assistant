@@ -1,37 +1,34 @@
+import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
-
-import yaml
+from typing import Dict, Any
 
 
-class Settings:
+class ConfigManager:
     """全局设置管理类（单例模式）"""
 
-    _instance: Optional['Settings'] = None
+    _instances: Dict[str, 'ConfigManager'] = {}
 
-    def __new__(cls) -> 'Settings':
-        """实现单例模式"""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
+    def __new__(cls, config_file):
+        if config_file not in cls._instances:
+            instance = super(ConfigManager, cls).__new__(cls)
+            instance.config = instance.load_config(config_file)
+            cls._instances[config_file] = instance
+        return cls._instances[config_file]
+
+    def __init__(self, config_file: str):
         """初始化设置（只在第一次创建实例时执行）"""
-        if self._initialized:
+        if hasattr(self, '_initialized') and self._initialized:
             return
 
         self._initialized = True
-        self.config: Dict[str, Any] = {}
-        self.load()
+        # self.config: Dict[str, Any] = {}
 
-    @classmethod
-    def get_instance(cls) -> 'Settings':
-        """获取Settings实例的类方法"""
-        if cls._instance is None:
-            cls._instance = Settings()
-        return cls._instance
+    def get_root_path(self) -> Path:
+        """获取应用根目录"""
+        if getattr(sys, 'frozen', False):
+            return Path(sys._MEIPASS)
+        return Path(__file__).parent.parent.parent
 
     def get_path(self, path_type: str, create: bool = True) -> Path:
         """获取指定类型的路径
@@ -48,17 +45,11 @@ class Settings:
         """
         paths = self.config.get('paths', {})
         if path_type not in paths:
-            raise ValueError(f"未知的路径类型: {path_type}")
+            raise ValueError(f"未知的路径类型: {paths}{path_type}")
 
         # 获取应用根目录
-        if getattr(sys, 'frozen', False):
-            # 打包后的环境
-            base_path = Path(sys._MEIPASS)
-        else:
-            # 开发环境
-            base_path = Path(__file__).parent.parent.parent
-
-        path = base_path / paths[path_type]
+        path = self.get_root_path() / paths[path_type]
+        
         if create:
             path.mkdir(parents=True, exist_ok=True)
 
@@ -87,27 +78,20 @@ class Settings:
         self.config[section][key] = value
         self.save()
 
-    def load(self) -> None:
-        """从YAML文件加载设置"""
-        try:
-            config_path = Path(__file__).parent.parent.parent / 'resources' / 'config' / 'application.yaml'
-            if config_path.exists():
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    yaml_config = yaml.safe_load(f)
-                    if yaml_config:
-                        self.config = yaml_config
-            else:
-                raise FileNotFoundError(f"配置文件不存在: {config_path}")
-        except Exception as e:
-            print(f"加载设置失败: {e}")
-            raise
+    def load_config(self, config_file: str):
+        """加载配置文件"""
+        self.config_file = self.get_root_path() / 'resources' / 'config' / (config_file + '.json')
+        if not self.config_file.is_file():
+            raise FileNotFoundError(f"配置文件未找到: {self.config_file}")
+
+        with open(self.config_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
 
     def save(self) -> None:
-        """保存设置到YAML文件"""
         try:
-            config_path = Path(__file__).parent.parent.parent / 'resources' / 'config' / 'application.yaml'
+            config_path = self.config_file
             config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True)
+                json.dump(self.config, f, ensure_ascii=False, indent=4)
         except Exception as e:
             print(f"保存设置失败: {e}")

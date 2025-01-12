@@ -7,9 +7,9 @@ from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from .label import FloatingLabel
 from .tabs.about_tab import AboutTab
 from .tabs.auto_tab import AutoTab
-from .. import __version__, __app_name__
-from ..config.settings import Settings
-from ..utils.logger_factory import LoggerFactory
+from ... import __version__, __app_name__
+from ...assistant.utils.logger_factory import LoggerFactory
+from ...config.settings import ConfigManager
 
 
 class MainWindow(QMainWindow):
@@ -18,7 +18,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """初始化主窗口"""
         super().__init__()
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         self.logger = LoggerFactory.get_logger()
 
         # 初始化组件

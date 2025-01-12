@@ -4,7 +4,7 @@ from typing import Dict, Type, Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from ..config.settings import Settings
+from ...config.settings import ConfigManager
 
 
 class LoggerFactory:
@@ -28,7 +28,7 @@ class LoggerFactory:
         """获取日志记录器实例（单例模式）"""
         if cls._instance is None:
             try:
-                settings = Settings.get_instance()
+                settings = ConfigManager("config")
                 logger_type = settings.get('logger', 'type', cls.DEFAULT_LOGGER_TYPE)
 
                 if logger_type not in cls._loggers:
@@ -55,7 +55,7 @@ class QtLogger(QObject):
 
     def __init__(self):
         super().__init__()
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         self.logs_path = self.settings.get_path('logs')
         self.log_config = self.settings.get('logger')
         self.format_str = self.log_config.get('format', '[%(time)s] [%(level)s] %(message)s')

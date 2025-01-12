@@ -32,7 +32,7 @@ class WorkerThread(QThread):
             self.pubg_core.stop()
             self._is_running = False
             # 设置超时等待
-            if not self.wait(10000):  # 等待10秒
+            if not self.wait(5000):  # 等待5秒
                 self.terminate()  # 强制终止
                 self.logger.error("线程强制终止")
         self.logger.close_progress(7)

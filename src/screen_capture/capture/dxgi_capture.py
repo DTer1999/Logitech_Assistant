@@ -3,7 +3,7 @@ from ctypes import c_void_p, c_bool, c_uint, c_ulonglong, POINTER, c_ubyte
 
 import numpy as np
 
-from ...core.capture.base_capture import BaseCapture
+from .base_capture import BaseCapture
 
 
 class DXGICapture(BaseCapture):
@@ -12,12 +12,12 @@ class DXGICapture(BaseCapture):
         self.method = 'dxgi'
 
         # 从配置文件获取分辨率
-        self.target_width = self.settings.get('screen', 'width', 2560)  # 默认1920
-        self.target_height = self.settings.get('screen', 'height', 1440)  # 默认1080
+        self.target_width = self.settings.get('frame_shape', 'width', 2560)  # 默认1920
+        self.target_height = self.settings.get('frame_shape', 'height', 1440)  # 默认1080
 
         # 加载 DLL
         dll_path = self.settings.get_path('dll') / 'CaptureScreen.dll'
-        self.dll = ctypes.CDLL(dll_path)
+        self.dll = ctypes.CDLL(str(dll_path))
 
         # 设置函数参数和返回类型
         self.dll.CreateScreenCapture.restype = c_void_p
@@ -47,7 +47,7 @@ class DXGICapture(BaseCapture):
             self.logger.error("Failed to create DXGI screen capture instance")
             raise RuntimeError("Failed to create DXGI screen capture instance")
 
-        self._initialized = False
+        self._initialized = False   
 
     def initialize(self):
         """初始化 DXGI 捕获"""
@@ -105,7 +105,7 @@ class DXGICapture(BaseCapture):
                 frame = frame[:, :self._width.value]
 
             # 直接返回 BGRA 格式，不做转换
-            return frame, self._timestamp.value
+            return frame
 
         except Exception as e:
             self.logger.error(f"Error in DXGI capture: {e}")

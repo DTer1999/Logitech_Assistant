@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from ...config.settings import Settings
-from ...utils.logger_factory import LoggerFactory
+from ..utils.process_logger import ProcessLogger
+from ...config.settings import ConfigManager
 
 
 class BaseCapture(ABC):
@@ -22,8 +22,8 @@ class BaseCapture(ABC):
         return cls._instances[cls]
 
     def __init__(self):
-        self.settings = Settings.get_instance()
-        self.logger = LoggerFactory.get_logger()
+        self.settings = ConfigManager("capture_config")
+        self.logger = ProcessLogger.get_instance()
         self.method = 'base'  # 子类需要覆盖这个属性
 
     @abstractmethod

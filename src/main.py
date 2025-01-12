@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+import multiprocessing
 import sys
 import traceback
 from typing import Optional
 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
-from src.config.settings import Settings
-from src.ui.main_window import MainWindow  # 使用绝对导入
-from src.utils.logger_factory import LoggerFactory
+from src.assistant.ui.main_window import MainWindow
+from src.assistant.utils.logger_factory import LoggerFactory
+from src.config.settings import ConfigManager
 
 
 class Application:
@@ -17,20 +17,30 @@ class Application:
     def __init__(self):
         self.app: Optional[QApplication] = None
         self.window: Optional[MainWindow] = None
+        self.capture_daemon = None  # 添加 capture_daemon 属性
         # 1. 初始化配置（全局单例）
-        self.settings = Settings.get_instance()
+        self.settings = ConfigManager("config")
         # 2. 初始化日志（全局单例）
         self.logger = LoggerFactory.get_logger()
 
     def initialize(self) -> bool:
         """初始化应用程序组件"""
         try:
-            # 3. 初始化UI
+            # 3. 启动截图进程
+            self.start_capture_process()
+
+            # 4. 初始化UI
             self.app = QApplication(sys.argv)
             self.window = MainWindow()
+            width = self._get_screen_width()
+            height = self._get_screen_height()
+            self.settings.set('screen', 'width', width)
+            self.settings.set('screen', 'height', height)
 
-            self.settings.set('screen', 'width', self._get_screen_width())
-            self.settings.set('screen', 'height', self._get_screen_height())
+            capture_config = ConfigManager('capture_config')
+            capture_config.set('frame_shape', 'width', width)
+            capture_config.set('frame_shape', 'height', height)
+            capture_config.save()
 
             # 应用窗口设置
             window_settings = self.settings.get('window')
@@ -48,6 +58,18 @@ class Application:
             self._show_error("初始化失败", str(e))
             return False
 
+    def start_capture_process(self):
+        """启动截图进程"""
+        try:
+            from src.screen_capture.screen_capture_daemon import ScreenCaptureDaemon
+            self.capture_daemon = ScreenCaptureDaemon()
+            if not self.capture_daemon.start():
+                raise Exception("启动截图进程失败")
+            self.logger.info("截图进程已启动")
+        except Exception as e:
+            self.logger.error(f"启动截图进程失败: {e}")
+            raise
+    
     def run(self) -> int:
         """运行应用程序
 
@@ -76,6 +98,11 @@ class Application:
     def cleanup(self):
         """清理资源"""
         try:
+            # 停止截图守护进程
+            if hasattr(self, 'capture_daemon') and self.capture_daemon:
+                self.capture_daemon.stop()
+                self.capture_daemon = None
+
             # 清理日志
             if self.logger:
                 self.logger.cleanup()
@@ -101,16 +128,52 @@ class Application:
 
     def _get_screen_width(self) -> int:
         """获取屏幕宽度"""
-        return QApplication.primaryScreen().size().width()
+        if self.app:
+            screen = self.app.primaryScreen()
+            return screen.size().width()
+        return 2560  # 默认宽度
 
     def _get_screen_height(self) -> int:
         """获取屏幕高度"""
-        return QApplication.primaryScreen().size().height()
+        if self.app:
+            screen = self.app.primaryScreen()
+            return screen.size().height()
+        return 1080  # 默认高度
+
 
 def main():
-    """程序入口点"""
+    if getattr(sys, 'frozen', False):
+        # 如果是打包后的程序，确保multiprocessing正常工作
+        multiprocessing.freeze_support()
+    
     app = Application()
-    sys.exit(app.run())
+
+    try:
+        sys.exit(app.run())
+    except KeyboardInterrupt:
+        # 处理 Ctrl+C
+        print("\n正在关闭程序...")
+        app.cleanup()
+    except Exception as e:
+        print(f"程序异常退出: {e}")
+        app.cleanup()
+    finally:
+        # 确保所有子进程都被终止
+        for p in multiprocessing.active_children():
+            try:
+                p.terminate()
+                p.join(timeout=0.5)
+                if p.is_alive():
+                    p.kill()
+            except Exception:
+                pass
+
+
+def run_capture():
+    """独立的进程函数"""
+    from src.screen_capture.screen_capture_daemon import ScreenCaptureDaemon
+    daemon = ScreenCaptureDaemon()
+    daemon.start()
 
 if __name__ == "__main__":
-    main() 
+    main()
