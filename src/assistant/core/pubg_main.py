@@ -1,6 +1,7 @@
 import json
 import time
 from dataclasses import dataclass
+from functools import wraps
 from threading import Thread, Lock, Event
 from typing import Dict
 
@@ -41,6 +42,27 @@ class GameState:
         """线程安全地获取 off_on_flag"""
         with self._lock:
             return self.off_on_flag
+
+
+def monitor_results(method):
+    """装饰器：监控 self.results 的变化并在变化时调用 write_files"""
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        # 保存修改前的状态
+        old_results = self.state.results.copy() if hasattr(self.state, 'results') else {}
+
+        # 执行原始方法
+        result = method(self, *args, **kwargs)
+
+        # 检查结果是否发生变化
+        if hasattr(self.state, 'results'):
+            if self.state.results != old_results:
+                self.write_files(self.state.results)
+
+        return result
+
+    return wrapper
 
 class PubgCore():
     """PUBG游戏核心类"""
@@ -124,6 +146,7 @@ class PubgCore():
         if button == mouse.Button.right:
             self.identify_shoot()
 
+    @monitor_results
     def identify_shoot(self) -> None:
         """识别开火状态"""
         if not hasattr(self, 'shoot_pixel'):
@@ -135,9 +158,9 @@ class PubgCore():
                 self.templates["shoot"],
                 [
                     self.shoot_pixel['x'], 
-                    self.shoot_pixel['y'], 
-                    26,  # 固定宽度
-                    15   # 固定高度
+                    self.shoot_pixel['y'],
+                    26,
+                    15
                 ]
             )
             self.state.right_button_pressed = (shoot_result == 'shoot')
@@ -146,6 +169,7 @@ class PubgCore():
             print(f"识别开火状态失败: {e}")
             self.state.right_button_pressed = False
 
+    @monitor_results
     def identify_pose(self, region: list) -> None:
         """持续识别姿势"""
         try:
@@ -156,6 +180,7 @@ class PubgCore():
                     region
                 )
                 self.state.results[pose_category] = pose_result
+                time.sleep(1)
         except Exception as e:
             self.logger.error(f"姿势识别线程异常: {e}")
         finally:
@@ -248,15 +273,15 @@ class PubgCore():
 
         # 写入 results.json
         results_json = {
-            "weapon_name": translate_name(self.state.results.get("weapons_name_" + self.state.current_weapon, "")),
-            "muzzles": translate_name(self.state.results.get("muzzles_" + self.state.current_weapon, "")),
-            "grips": translate_name(self.state.results.get("grips_" + self.state.current_weapon, "")),
-            "scopes": translate_name(self.state.results.get("scopes_" + self.state.current_weapon, "")),
-            "stocks": translate_name(self.state.results.get("stocks_" + self.state.current_weapon, "")),
-            "poses": translate_name(self.state.results.get("poses", "")),
-            "bag": translate_name(self.state.results.get("bag", "none")),
-            "car": translate_name(self.state.results.get("car", "none")),
-            "shoot": translate_name(self.state.results.get("shoot", "none"))
+            "weapon_name": translate_name(results.get("weapons_name_" + self.state.current_weapon, "")),
+            "muzzles": translate_name(results.get("muzzles_" + self.state.current_weapon, "")),
+            "grips": translate_name(results.get("grips_" + self.state.current_weapon, "")),
+            "scopes": translate_name(results.get("scopes_" + self.state.current_weapon, "")),
+            "stocks": translate_name(results.get("stocks_" + self.state.current_weapon, "")),
+            "poses": translate_name(results.get("poses", "")),
+            "bag": translate_name(results.get("bag", "none")),
+            "car": translate_name(results.get("car", "none")),
+            "shoot": translate_name(results.get("shoot", "none"))
         }
 
         with open(f"{temp}/results.json", 'w', encoding='utf-8') as f:
@@ -289,10 +314,7 @@ class PubgCore():
 
             if self.state.right_button_pressed:
                 self.logger.info("右键开镜，正在压枪中")
-                self.write_files(self.state.results)
                 time.sleep(1)
-            else:
-                self.write_files({})
 
             time.sleep(0.01)
 
@@ -301,6 +323,7 @@ class PubgCore():
         self.logger.info("主线程结束，关闭自动识别")
         self.logger.close_progress(6)
 
+    @monitor_results
     def process_recognition(self) -> None:
         """处理识别逻辑"""
         extends = ['poses', 'bag', 'shoot']
@@ -310,15 +333,16 @@ class PubgCore():
         self.state.is_recognizing = False
         self.display_results()
 
+    @monitor_results
     def toggle_recognition(self, event) -> None:
         """切换识别状态"""
         time.sleep(0.1)
         bag_category, bag_result = self.image_recognition.process_region("bag", self.templates["bag"],
                                                                          self.regions['bag'])
-
         self.state.results[bag_category] = bag_result
         self.state.is_recognizing = (bag_result == 'bag')
 
+    @monitor_results
     def close_recognition(self, event) -> None:
         """关闭识别"""
         self.state.is_recognizing = False

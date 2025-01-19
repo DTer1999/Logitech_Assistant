@@ -10,17 +10,18 @@ class WorkerThread(QThread):
     def __init__(self):
         super().__init__()
         self.logger = LoggerFactory.get_logger()
-        self.pubg_core = None
+        self.pubg_core = PubgCore()
         self._is_running = False
         self.stop_signal.connect(self.stop)
 
     def run(self):
+
         if self._is_running:
             return
         try:
             self.logger.info("线程开始运行")
             self._is_running = True
-            self.pubg_core = PubgCore()
+            # self.pubg_core = PubgCore()
             self.pubg_core.start()
         except Exception as e:
             self.logger.error(f"线程运行错误: {e}")
@@ -28,6 +29,7 @@ class WorkerThread(QThread):
             self.stop_signal.emit()
 
     def stop(self):
+
         if self.is_alive():
             self.pubg_core.stop()
             self._is_running = False

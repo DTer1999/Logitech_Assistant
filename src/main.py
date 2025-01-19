@@ -27,7 +27,7 @@ class Application:
         """初始化应用程序组件"""
         try:
             # 3. 启动截图进程
-            self.start_capture_process()
+            # self.start_capture_process()
 
             # 4. 初始化UI
             self.app = QApplication(sys.argv)
@@ -61,8 +61,11 @@ class Application:
     def start_capture_process(self):
         """启动截图进程"""
         try:
+            from src.assistant.core.frame_client import FrameClient
+            self.frame_client = FrameClient.get_instance()
+            
             from src.screen_capture.screen_capture_daemon import ScreenCaptureDaemon
-            self.capture_daemon = ScreenCaptureDaemon()
+            self.capture_daemon = ScreenCaptureDaemon(self.frame_client.command_queue)
             if not self.capture_daemon.start():
                 raise Exception("启动截图进程失败")
             self.logger.info("截图进程已启动")

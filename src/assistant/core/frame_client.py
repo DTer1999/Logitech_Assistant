@@ -24,9 +24,12 @@ class FrameClient:
 
         self.logger = LoggerFactory.get_logger()
         self.shared_mem = None
-        self.command_queue = None
+        self.command_queue = Queue()
         self.frame_shape = (1440, 2560, 3)
         self._is_connected = False
+        self._last_frame = None
+        self._last_frame_time = 0
+        self._frame_interval = 1.0 / 10  # 默认60fps
 
         FrameClient._instance = self
 
@@ -52,7 +55,7 @@ class FrameClient:
                     name=memory_name,
                     create=False
                 )
-                self.command_queue = Queue()
+                # self.command_queue = 
                 self._is_connected = True
                 self.logger.info("成功连接到截图进程")
                 return True
@@ -74,6 +77,8 @@ class FrameClient:
         """设置帧率"""
         if self.command_queue:
             self.command_queue.put(("set_fps", fps))
+            self._frame_interval = 1.0 / fps
+            self.logger.info(f"设置帧率为: {fps}")
 
     def is_capture_running(self) -> bool:
         """检查截图进程是否运行"""
@@ -87,22 +92,47 @@ class FrameClient:
         if not self.shared_mem:
             return None
 
+        current_time = time.perf_counter()
+
+        # 如果缓存的帧还在有效期内，直接返回缓存的帧
+        # if (self._last_frame is not None and
+        #     current_time - self._last_frame_time < self._frame_interval):
+        #     return self._last_frame.copy()
+
+        # 发送获取帧的命令
+        self.command_queue.put(("get_frame", None))
+        
         try:
-            start_time = time.perf_counter()
+            # 设置最大等待时间，避免无限等待
+            max_retries = 50  # 最多等待5秒
+            retry_count = 5
 
-            # 直接从共享内存读取，避免copy操作
-            frame = np.ndarray(
-                self.frame_shape,
-                dtype=np.uint8,
-                buffer=self.shared_mem.buf,
-                strides=None,
-                order='C'
-            )
-            # 只在需要修改数据时才复制
-            if self._need_modify_frame():
-                return frame.copy()
-            return frame
+            while True:
+                frame = np.ndarray(
+                    self.frame_shape,
+                    dtype=np.uint8,
+                    buffer=self.shared_mem.buf,
+                    strides=None,
+                    order='C'
+                )
 
+                # 检查是否获取到有效帧
+                if not np.all(frame == 0):
+                    self._last_frame = frame.copy()
+                    self._last_frame_time = current_time
+                    # 清空共享内存 - 使用字节类型的0
+                    self.shared_mem.buf[:] = bytes([0] * len(self.shared_mem.buf))
+                    return self._last_frame.copy()
+
+                # 增加重试次数
+                retry_count += 1
+                if retry_count >= max_retries:
+                    self.logger.warning("等待帧数据超时")
+                    return None
+
+                # 短暂等待后重试
+                time.sleep(0.1)
+                
         except Exception as e:
             self.logger.error(f"获取帧失败: {e}")
             return None

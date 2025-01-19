@@ -18,9 +18,13 @@ def main():
                 proc.pid != current_process.pid):
             print("截图进程已在运行")
             return
+    from multiprocessing import Queue
+    command_queue = Queue()
+    for _ in range(100):
+        command_queue.put(("get_frame", None))
 
     # 启动后台程序
-    daemon = ScreenCaptureDaemon()
+    daemon = ScreenCaptureDaemon(command_queue)
     if daemon.start():
         try:
             # 保持主进程运行

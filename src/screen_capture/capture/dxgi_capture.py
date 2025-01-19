@@ -47,13 +47,16 @@ class DXGICapture(BaseCapture):
             self.logger.error("Failed to create DXGI screen capture instance")
             raise RuntimeError("Failed to create DXGI screen capture instance")
 
-        self._initialized = False   
+        self._initialized = False
+        self.frame_data = np.empty((self.target_height, self.target_width, 4), dtype=np.uint8)  # 预分配数组
 
     def initialize(self):
         """初始化 DXGI 捕获"""
         if self._initialized:
             return True
-
+        # import cProfile
+        # self.profiler = cProfile.Profile()
+        # self.profiler.enable()  # 开始性能分析
         if not self.handle:
             self.logger.error("DXGI handle is null")
             return False
@@ -63,19 +66,25 @@ class DXGICapture(BaseCapture):
             self.logger.error("Failed to initialize DXGI capture")
         else:
             self.logger.info("DXGI capture initialized successfully")
+            # 捕获第一帧以确保初始化完成
+            # first_frame = self.capture()
+            # if first_frame is None:
+            #     self.logger.error("Failed to capture first frame")
+            #     self._initialized = False
+            
         return self._initialized
 
     def capture(self):
-        """获取一帧画面
+        """执行截图
         
         Returns:
-            tuple: (frame, timestamp) 如果成功，frame 是 BGRA 格式的 numpy 数组，timestamp 是时间戳
-                  None 如果失败
+            numpy.ndarray: 如果成功，返回 RGB 格式的 numpy 数组
+            None: 如果失败
         """
-        if not self._initialized and not self.initialize():
-            return None
-
         try:
+            # 确保指针为空
+            self._data_ptr = POINTER(c_ubyte)()
+            
             success = self.dll.GetNextFrameData(
                 self.handle,
                 ctypes.byref(self._data_ptr),
@@ -88,31 +97,29 @@ class DXGICapture(BaseCapture):
             if not success or not self._data_ptr:
                 return None
 
-            # 计算实际的数据大小
-            buffer_size = self._stride.value * self._height.value
+            try:
+                buffer_size = self._stride.value * self._height.value
+                # 创建数组的副本以避免内存访问问题
+                frame_data = np.ctypeslib.as_array(self._data_ptr, shape=(buffer_size,)).copy()
 
-            # 创建 numpy 数组，确保复制数据
-            frame_data = np.fromiter(
-                (self._data_ptr[i] for i in range(buffer_size)),
-                dtype=np.uint8
-            )
+                # 重塑数组为正确的维度 (BGRA)
+                actual_width = self._stride.value // 4  # BGRA 格式，每像素4字节
+                frame = frame_data.reshape(self._height.value, actual_width, 4)
 
-            # 重塑数组
-            frame = frame_data.reshape(self._height.value, self._stride.value // 4, 4)
+                # 转换 BGRA 为 RGB (去掉 alpha 通道并调换通道顺序)
+                rgb_frame = frame[..., [2, 1, 0]].copy()  # 创建副本以确保内存安全
 
-            # 如果需要，裁剪到实际宽度
-            if self._stride.value // 4 != self._width.value:
-                frame = frame[:, :self._width.value]
+                return rgb_frame
 
-            # 直接返回 BGRA 格式，不做转换
-            return frame
+            finally:
+                # 确保在任何情况下都释放内存
+                if self._data_ptr:
+                    ctypes.windll.ole32.CoTaskMemFree(self._data_ptr)
+                    self._data_ptr = POINTER(c_ubyte)()
 
         except Exception as e:
-            self.logger.error(f"Error in DXGI capture: {e}")
+            self.logger.error(f"捕获屏幕失败: {e}")
             return None
-        finally:
-            if self._data_ptr:
-                ctypes.windll.ole32.CoTaskMemFree(self._data_ptr)
 
     def cleanup(self):
         """释放资源"""
@@ -125,5 +132,8 @@ class DXGICapture(BaseCapture):
                 pass
 
     def __del__(self):
-        """析构时释放资源"""
-        self.cleanup()
+        """析构函数，确保资源被正确释放"""
+        try:
+            self.cleanup()
+        except:
+            pass

@@ -23,7 +23,7 @@ def capture_worker(
         shared_array = np.ndarray(
             frame_shape,
             dtype=np.uint8,
-            buffer=shared_mem.buf[0:],  # 直接使用共享内存
+            buffer=shared_mem.buf[0:],
             strides=None,
             order='C'
         )
@@ -37,12 +37,11 @@ def capture_worker(
         last_frame_time = time.perf_counter()
 
         while True:
-            start_time = time.perf_counter()  # 记录开始时间
-
             # 检查命令队列
-            while not command_queue.empty():
+            if not command_queue.empty():
                 try:
-                    cmd, value = command_queue.get_nowait()
+                    # 队列出队
+                    cmd, value = command_queue.get()
                     if cmd == "set_fps":
                         fps = value
                         frame_interval = 1.0 / fps
@@ -50,58 +49,57 @@ def capture_worker(
                         logger.info(f"帧率已更改为: {fps}")
                     elif cmd == "set_method":
                         method = value
-                        capture_method = CaptureManager().get_capture(method)  # 更新捕获方法
+                        capture_method = CaptureManager().get_capture(method)
                         settings.set('capture', 'method', method)
                         logger.info(f"捕获方法已更改为: {method}")
+                    elif cmd == "get_frame":
+                        start_time = time.perf_counter()
+                        current_time = time.perf_counter()
+                        elapsed_time = current_time - last_frame_time
+
+                        # 如果距离上次截图时间不够，等待剩余时间
+                        if elapsed_time < frame_interval:
+                            wait_time = frame_interval - elapsed_time
+                            time.sleep(wait_time)
+
+                        logger.debug(f"截图成功，时间间隔: {time.perf_counter() - last_frame_time:.2f}秒")
+
+                        try:
+                            frame = capture_method.capture()
+
+                            if frame is not None and not np.all(frame == 0):
+                                # 确保帧为BGR格式
+                                if isinstance(frame, np.ndarray):
+                                    if frame.shape[2] == 4:  # BGRA转BGR
+                                        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                                    # elif frame.shape[2] == 3:
+                                    #     pass  # 已是BGR
+                                    # else:
+                                    #     logger.error(f"不支持的帧格式: {frame.shape}")
+                                    #     continue
+
+                                    # # 调整大小到目标尺寸
+                                    # if frame.shape[:2] != frame_shape[:2]:
+                                    #     frame = cv2.resize(frame, (frame_shape[1], frame_shape[0]))
+
+                                    # 更新共享内存
+                                    np.copyto(shared_array, frame)
+                                    last_frame_time = time.perf_counter()  # 更新最后截图时间
+
+                                    # logger.debug(f"截图成功，时间间隔: {time.perf_counter() - start_time:.2f}秒")
+                                else:
+                                    logger.error(f"不支持的帧类型: {type(frame)}")
+                        except Exception as e:
+                            logger.error(f"截图失败: {e}")
                     elif cmd == "stop":
                         logger.info("收到停止命令")
                         return
                 except Exception as e:
                     logger.error(f"处理命令失败: {e}")
 
-            # 控制帧率
-            current_time = time.perf_counter()
-            if current_time - last_frame_time >= frame_interval:
-                try:
-                    # 使用选择的方法截图
-                    frame = capture_method.capture()
+            # 短暂休眠以避免CPU占用过高
+            time.sleep(0.001)
 
-                    if frame is not None:
-                        # 确保帧为BGR格式
-                        if isinstance(frame, np.ndarray):
-                            if frame.shape[2] == 4:  # BGRA转BGR
-                                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-                            elif frame.shape[2] == 3:
-                                pass  # 已是BGR
-                            else:
-                                logger.error(f"不支持的帧格式: {frame.shape}")
-                                continue
-                        else:
-                            logger.error(f"不支持的帧类型: {type(frame)}")
-                            continue
-
-                        # 调整大小到目标尺寸
-                        if frame.shape[:2] != frame_shape[:2]:
-                            frame = cv2.resize(frame, (frame_shape[1], frame_shape[0]))
-
-                        # 更新共享内存
-                        np.copyto(shared_array, frame)
-                        last_frame_time = current_time  # 更新最后帧时间
-
-                        # 保存图片
-                        # PictureUtil.savePicture(frame)
-
-                        # 记录截图时间
-                        # logger.debug(f"截图成功，时间间隔: {time.perf_counter() - start_time:.2f}秒")
-                    else:
-                        logger.warning("捕获的帧为空")
-
-                except Exception as e:
-                    logger.error(f"截图失败: {e}")
-
-            # 记录每次循环的时间
-            # logger.debug(f"循环耗时: {time.perf_counter() - start_time:.2f}秒")
-            settings.save()
     except Exception as e:
         logger.error(f"截图进程出错: {e}")
     finally:

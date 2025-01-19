@@ -9,13 +9,13 @@ from src.screen_capture.utils.process_logger import ProcessLogger
 
 
 class ScreenCaptureDaemon:
-    def __init__(self):
+    def __init__(self, command_queue: Queue = Queue()):
         # 通过工厂获取 process 类型的 logger
         self.logger = ProcessLogger.get_instance()
         self.settings = ConfigManager("capture_config")
         self.process = None
         self.shared_mem = None
-        self.command_queue = None
+        self.command_queue = command_queue
         self.frame_shape = (
             self.settings.get('frame_shape', 'height', 1440),
             self.settings.get('frame_shape', 'width', 2560),
@@ -45,7 +45,7 @@ class ScreenCaptureDaemon:
             self.logger.info(f"成功创建共享内存: {self.memory_name}")
 
             # 创建命令队列
-            self.command_queue = Queue()
+            # self.command_queue = Queue()
 
             # 创建并启动截图进程
             from .capture_process import capture_worker

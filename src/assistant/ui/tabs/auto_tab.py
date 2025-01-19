@@ -5,7 +5,6 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QLabel, QCheckBox, QPushButton, QTextBrowser, QGroupBox, QProgressDialog,
                              QComboBox, QMessageBox, QSlider)
 
-from ...core.frame_client import FrameClient
 from ...core.worker_thread import WorkerThread
 from ...ui.label import FloatingLabel
 from ...utils.logger_factory import LoggerFactory
@@ -34,9 +33,7 @@ class AutoTab(QWidget):
         # 4. 关闭进度信号 -> update_close_progress
         self.logger.close_progress_signal.connect(self.update_close_progress)
 
-        # 5. 连接到后台进程
-        self.frame_client = FrameClient.get_instance()
-        self.frame_client.connect()
+        self.capture_manager = CaptureManager()
 
         self.weapon1_labels = []  # “1号”武器的5个标签
         self.weapon2_labels = []  # “2号”武器的5个标签
@@ -65,6 +62,8 @@ class AutoTab(QWidget):
         # 连接信号
         self.show_cb.stateChanged.connect(self.show_hide_label)
         self.always_on_top_cb.stateChanged.connect(self.toggle_always_on_top)
+        self.show_cb.setChecked(True)
+        # self.label.setVisible(True)
 
         top_right.addWidget(self.always_on_top_cb)
         top_right.addWidget(self.show_cb)
@@ -160,13 +159,11 @@ class AutoTab(QWidget):
         self.capture_combo.setFixedSize(80, 25)
 
         # 获取所有可用的截图方式
-        capture_methods = CaptureManager().get_capture_methods()
+        capture_methods = self.capture_manager.get_capture_methods()
         for method_id, method_class in capture_methods.items():
             self.capture_combo.addItem(method_id, method_id)
-
-        capture_config = ConfigManager("capture_config")
         # 设置当前选中的截图方式
-        current_method = capture_config.get('capture', 'method', list(capture_methods.keys())[0])
+        current_method = self.capture_manager.get_method()
         index = self.capture_combo.findData(current_method)
         if index >= 0:
             self.capture_combo.setCurrentIndex(index)
@@ -195,7 +192,7 @@ class AutoTab(QWidget):
         self.fps_slider.setPageStep(5)
 
         # 设置当前FPS值
-        current_fps = capture_config.get('capture', 'fps', 5)
+        current_fps = self.capture_manager.get_fps()
         self.fps_slider.setValue(current_fps)
         self.fps_value_label.setText(str(current_fps))
 
@@ -418,7 +415,7 @@ class AutoTab(QWidget):
         """截图方式改变时的处理"""
         try:
             method = self.capture_combo.currentData()
-            self.frame_client.set_capture_method(method)
+            self.capture_manager.set_method(method)
             self.logger.info(f"截图方式已更改为: {method}")
         except Exception as e:
             self.logger.error(f"更改截图方式时出错: {e}")
@@ -431,7 +428,7 @@ class AutoTab(QWidget):
         """FPS改变时的处理（滑动结束时）"""
         try:
             value = self.fps_slider.value()
-            self.frame_client.set_fps(value)
+            self.capture_manager.set_fps(value)
             self.logger.info(f"FPS已更改为: {value}")
         except Exception as e:
             self.logger.error(f"更改FPS时出错: {e}")
