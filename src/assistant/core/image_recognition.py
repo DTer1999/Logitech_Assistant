@@ -97,7 +97,7 @@ class ImageRecognition:
             # 从共享内存获取完整帧
             # from .frame_client import FrameClient
             # frame = FrameClient.get_instance().get_frame()
-            from ...screen_capture.capture_process import CaptureManager
+            from ...screen_capture.capture_manager import CaptureManager
             frame = CaptureManager.get_instance().get_frame()
             if frame is None:
                 return self.frame_cache

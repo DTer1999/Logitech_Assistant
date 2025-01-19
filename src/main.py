@@ -26,8 +26,6 @@ class Application:
     def initialize(self) -> bool:
         """初始化应用程序组件"""
         try:
-            # 3. 启动截图进程
-            # self.start_capture_process()
 
             # 4. 初始化UI
             self.app = QApplication(sys.argv)
@@ -57,21 +55,6 @@ class Application:
         except Exception as e:
             self._show_error("初始化失败", str(e))
             return False
-
-    def start_capture_process(self):
-        """启动截图进程"""
-        try:
-            from src.assistant.core.frame_client import FrameClient
-            self.frame_client = FrameClient.get_instance()
-            
-            from src.screen_capture.screen_capture_daemon import ScreenCaptureDaemon
-            self.capture_daemon = ScreenCaptureDaemon(self.frame_client.command_queue)
-            if not self.capture_daemon.start():
-                raise Exception("启动截图进程失败")
-            self.logger.info("截图进程已启动")
-        except Exception as e:
-            self.logger.error(f"启动截图进程失败: {e}")
-            raise
     
     def run(self) -> int:
         """运行应用程序
@@ -101,11 +84,6 @@ class Application:
     def cleanup(self):
         """清理资源"""
         try:
-            # 停止截图守护进程
-            if hasattr(self, 'capture_daemon') and self.capture_daemon:
-                self.capture_daemon.stop()
-                self.capture_daemon = None
-
             # 清理日志
             if self.logger:
                 self.logger.cleanup()
@@ -170,13 +148,6 @@ def main():
                     p.kill()
             except Exception:
                 pass
-
-
-def run_capture():
-    """独立的进程函数"""
-    from src.screen_capture.screen_capture_daemon import ScreenCaptureDaemon
-    daemon = ScreenCaptureDaemon()
-    daemon.start()
 
 if __name__ == "__main__":
     main()
