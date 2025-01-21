@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
 
         # 设置窗口图标
         icon = QIcon()
-        icon_path = str(self.settings.get_path('assets') / '2.png')
+        icon_path = str(self.settings.get_path('assets') / '1.ico')
         pixmap = QPixmap(icon_path)
         if pixmap.isNull():
             self.logger.error(f"无法加载图标: {icon_path}")

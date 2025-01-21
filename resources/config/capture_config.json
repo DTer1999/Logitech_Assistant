@@ -5,7 +5,7 @@
         "memory_name": "ScreenCaptureMemory_1737274831_fa5b77e1"
     },
     "paths": {
-        "dll": "CaptureScreen/x64/Debug",
+        "dll": "resources/dll",
         "logs": "logs"
     },
     "frame_shape": {

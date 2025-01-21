@@ -150,9 +150,9 @@ class ImageRecognition:
         exclude_categories: Optional[List[str]] = None
     ) -> Dict[str, str]:
         """批量处理多个区域的图像识别"""
-        import cProfile
-        self.profiler = cProfile.Profile()
-        self.profiler.enable()  # 开始性能分析
+        # import cProfile
+        # self.profiler = cProfile.Profile()
+        # self.profiler.enable()  # 开始性能分析
 
         results = {}
         exclude_categories = exclude_categories or []
@@ -187,8 +187,8 @@ class ImageRecognition:
         except Exception as e:
             self.logger.error(f"批量处理失败: {e}")
 
-        self.profiler.disable()  # 停止性能分析
-        self.profiler.print_stats(sort='cumtime')  # 打印性能分析结果
-        self.profiler.dump_stats('profile_stats.prof')  # 保存性能分析结果
+        # self.profiler.disable()  # 停止性能分析
+        # self.profiler.print_stats(sort='cumtime')  # 打印性能分析结果
+        # self.profiler.dump_stats('profile_stats.prof')  # 保存性能分析结果
 
         return results

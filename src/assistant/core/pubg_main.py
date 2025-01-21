@@ -57,9 +57,12 @@ def monitor_results(method):
 
         # 检查结果是否发生变化
         if hasattr(self.state, 'results'):
-            if self.state.results != old_results:
+            # 开镜的时候才保存数据
+            if not self.state.right_button_pressed:
+                self.write_files({})
+            elif self.state.results != old_results:
                 self.write_files(self.state.results)
-
+        self.display_results()
         return result
 
     return wrapper
@@ -331,7 +334,6 @@ class PubgCore():
         self.state.current_scope = self.state.results.get('scopes_' + self.state.current_weapon,
                                                           self.state.current_scope)
         self.state.is_recognizing = False
-        self.display_results()
 
     @monitor_results
     def toggle_recognition(self, event) -> None:
